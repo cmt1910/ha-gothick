@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 import shutil
 
-from .common import check_commands, ensure_directories, final_font_path, run_command, stage_path
+from .common import check_commands, ensure_directories, final_font_path, python_command, run_command, stage_path
 from .config import BuildConfig, load_config
 
 
@@ -41,7 +41,6 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
         "adjust_bizud.py",
         "merge.py",
         "patch_nerd.py",
-        "optimize.py",
     ]
     for script in fontforge_scripts:
         run_command(
@@ -50,19 +49,42 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
         )
 
     run_command(
-        ["uv", "run", "python", "src/font_builder/patch_tables.py", "--weight", weight, "--config", config_arg],
+        [*python_command(), "src/font_builder/patch_tables.py", "--weight", weight, "--config", config_arg],
+        cwd=root,
+    )
+
+    run_command(
+        ["fontforge", "-script", "src/font_builder/optimize.py", "--weight", weight, "--config", config_arg],
         cwd=root,
     )
 
     optimized = stage_path(config, "optimized", weight, ".ttf")
     hinted = stage_path(config, "hinted", weight, ".ttf")
-    final_input = hinted
+    finalized = stage_path(config, "finalized", weight, ".ttf")
+    final_input = finalized
     if skip_hinting:
         hinted.write_bytes(optimized.read_bytes())
     else:
         result = _run_hinting(optimized, hinted, root)
         if not result:
             hinted.write_bytes(optimized.read_bytes())
+
+    run_command(
+        [
+            *python_command(),
+            "src/font_builder/patch_tables.py",
+            "--weight",
+            weight,
+            "--config",
+            config_arg,
+            "--input",
+            str(hinted),
+            "--output",
+            str(finalized),
+        ],
+        cwd=root,
+    )
+
     final_path = final_font_path(config, weight)
     shutil.copyfile(final_input, final_path)
 

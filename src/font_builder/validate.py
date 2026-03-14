@@ -9,6 +9,7 @@ SRC_DIR = ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+from fontTools.pens.boundsPen import BoundsPen
 from fontTools.ttLib import TTFont
 
 from font_builder.config import BuildConfig, load_config
@@ -38,25 +39,40 @@ def validate_font(font: TTFont, config: BuildConfig) -> list[str]:
 
     if font["post"].isFixedPitch != 1:
         errors.append("post.isFixedPitch must be 1")
+    if font["post"].formatType != 2.0:
+        errors.append("post.formatType must be 2.0")
     if font["OS/2"].panose.bProportion != 9:
         errors.append("OS/2.panose.bProportion must be 9")
-    if font["OS/2"].xAvgCharWidth != metrics.half_width:
-        errors.append(f"OS/2.xAvgCharWidth must be {metrics.half_width}")
+    expected_xavg = _compute_x_avg_char_width(font)
+    if font["OS/2"].xAvgCharWidth != expected_xavg:
+        errors.append(f"OS/2.xAvgCharWidth must be {expected_xavg}")
     if font["head"].unitsPerEm != metrics.upm:
         errors.append(f"head.unitsPerEm must be {metrics.upm}")
+    if font["OS/2"].sTypoAscender != metrics.typo_ascender:
+        errors.append(f"OS/2.sTypoAscender must be {metrics.typo_ascender}")
+    if font["OS/2"].sTypoDescender != metrics.typo_descender:
+        errors.append(f"OS/2.sTypoDescender must be {metrics.typo_descender}")
+    if font["OS/2"].sTypoLineGap != 0:
+        errors.append("OS/2.sTypoLineGap must be 0")
     if font["hhea"].ascent != metrics.win_ascent:
         errors.append(f"hhea.ascent must be {metrics.win_ascent}")
     if font["hhea"].descent != -metrics.win_descent:
         errors.append(f"hhea.descent must be {-metrics.win_descent}")
+    if font["hhea"].lineGap != 0:
+        errors.append("hhea.lineGap must be 0")
     if 0xE0A0 not in cmap:
         errors.append("Powerline glyph U+E0A0 is missing")
     if 0xE000 in cmap:
         errors.append("Pomicons glyph U+E000 must not be present")
+    if 0x00AD in cmap:
+        errors.append("Soft Hyphen U+00AD must not be present")
     formats = {table.format for table in font["cmap"].tables}
     if 4 not in formats:
         errors.append("cmap format 4 is missing")
     if 12 not in formats:
         errors.append("cmap format 12 is missing")
+    errors.extend(_check_typo_ascender(font))
+    errors.extend(_check_ligature_carets(font, metrics.half_width))
 
     errors.extend(_check_widths(font, glyph_set, cmap, range(0x20, 0x7F), metrics.half_width, "ASCII"))
     errors.extend(_check_widths(font, glyph_set, cmap, range(0x3041, 0x3097), metrics.full_width, "Hiragana"))
@@ -88,6 +104,70 @@ def _check_widths(
     if present == 0:
         errors.append(f"{label} glyphs are missing")
     return errors
+
+
+def _compute_x_avg_char_width(font: TTFont) -> int:
+    widths = [width for width, _ in font["hmtx"].metrics.values() if width > 0]
+    if not widths:
+        raise ValueError("No non-zero glyph widths available for xAvgCharWidth")
+    return int(round(sum(widths) / len(widths)))
+
+
+def _check_typo_ascender(font: TTFont) -> list[str]:
+    glyph_name = font.getBestCmap().get(0x00C0)
+    if glyph_name is None:
+        return ["Agrave glyph is missing"]
+
+    pen = BoundsPen(font.getGlyphSet())
+    font.getGlyphSet()[glyph_name].draw(pen)
+    if pen.bounds is None:
+        return ["/Agrave bounds could not be calculated"]
+
+    _, _, _, y_max = pen.bounds
+    if font["OS/2"].sTypoAscender <= y_max:
+        return [f"OS/2.sTypoAscender must be greater than /Agrave yMax {int(y_max)}"]
+    return []
+
+
+def _check_ligature_carets(font: TTFont, half_width: int) -> list[str]:
+    ligatures = _collect_ligatures(font)
+    if not ligatures:
+        return []
+    if "GDEF" not in font or getattr(font["GDEF"].table, "LigCaretList", None) is None:
+        return ["GDEF LigCaretList must exist for GSUB ligatures"]
+
+    lig_caret_list = font["GDEF"].table.LigCaretList
+    coverage = getattr(getattr(lig_caret_list, "Coverage", None), "glyphs", []) or []
+    errors: list[str] = []
+    for glyph_name, component_count in ligatures.items():
+        if glyph_name not in coverage:
+            errors.append(f"Ligature caret missing for {glyph_name}")
+            continue
+        coverage_index = coverage.index(glyph_name)
+        lig_glyph = lig_caret_list.LigGlyph[coverage_index]
+        if lig_glyph.CaretCount != component_count - 1:
+            errors.append(f"Ligature caret count mismatch for {glyph_name}")
+            continue
+        expected_positions = [half_width * index for index in range(1, component_count)]
+        actual_positions = [caret.Coordinate for caret in lig_glyph.CaretValue]
+        if actual_positions != expected_positions:
+            errors.append(f"Ligature caret positions mismatch for {glyph_name}: {actual_positions} != {expected_positions}")
+    return errors
+
+
+def _collect_ligatures(font: TTFont) -> dict[str, int]:
+    if "GSUB" not in font:
+        return {}
+    ligatures: dict[str, int] = {}
+    for lookup in font["GSUB"].table.LookupList.Lookup:
+        if lookup.LookupType != 4:
+            continue
+        for subtable in lookup.SubTable:
+            for first_component, entries in getattr(subtable, "ligatures", {}).items():
+                for ligature in entries:
+                    component_count = 1 + len(ligature.Component)
+                    ligatures.setdefault(ligature.LigGlyph, component_count)
+    return ligatures
 
 
 if __name__ == "__main__":

@@ -13,9 +13,9 @@ metrics:
   ascender: 1556
   descender: -492
   line_gap: 0
-  typo_ascender: 1556
-  typo_descender: -492
-  typo_line_gap: 410
+  typo_ascender: 1901
+  typo_descender: -483
+  typo_line_gap: 0
   win_ascent: 1901
   win_descent: 483
   x_height: 1120

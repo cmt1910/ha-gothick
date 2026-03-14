@@ -11,7 +11,8 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from fontTools import subset
-from fontTools.ttLib import TTFont
+from fontTools.ttLib import TTFont, newTable
+from fontTools.ttLib.tables import otTables
 
 from font_builder.common import stage_path
 from font_builder.config import BuildConfig, load_config
@@ -54,7 +55,6 @@ def patch_tables(font: TTFont, config: BuildConfig, weight: str) -> None:
     os2.usWinDescent = metrics.win_descent
     os2.sxHeight = metrics.x_height
     os2.sCapHeight = metrics.cap_height
-    os2.xAvgCharWidth = metrics.half_width
     os2.panose.bProportion = 9
     os2.fsSelection |= 1 << 7
     if weight.lower() == "bold":
@@ -77,11 +77,14 @@ def patch_tables(font: TTFont, config: BuildConfig, weight: str) -> None:
     head.macStyle = 1 if weight.lower() == "bold" else 0
     head.fontRevision = float(opentype_version)
 
+    _subset_font(font)
     post = font["post"]
     post.isFixedPitch = 1 if metrics.is_fixed_pitch else 0
-    post.formatType = 3.0
-
-    _subset_font(font)
+    post.formatType = 2.0
+    post.extraNames = []
+    post.mapping = {}
+    _ensure_ligature_carets(font, metrics.half_width)
+    os2.xAvgCharWidth = _compute_x_avg_char_width(font)
 
 
 def _patch_name_table(
@@ -130,7 +133,7 @@ def _format_opentype_version(version: str) -> str:
 
 def _subset_font(font: TTFont) -> None:
     cmap = font.getBestCmap()
-    keep_codepoints = sorted(set(cmap) - _case_mismatch_codepoints(cmap))
+    keep_codepoints = sorted((set(cmap) - _case_mismatch_codepoints(cmap)) - {0x00AD})
 
     options = subset.Options()
     options.name_IDs = ["*"]
@@ -186,6 +189,87 @@ def _validate_cmap(font: TTFont) -> None:
         raise ValueError("Powerline glyph U+E0A0 is missing")
     if not any(codepoint > 0xFFFF for codepoint in best_map):
         raise ValueError("Supplementary Unicode mappings are missing from cmap")
+
+
+def _compute_x_avg_char_width(font: TTFont) -> int:
+    widths = [width for width, _ in font["hmtx"].metrics.values() if width > 0]
+    if not widths:
+        raise ValueError("No non-zero glyph widths available for xAvgCharWidth")
+    return int(round(sum(widths) / len(widths)))
+
+
+def _ensure_ligature_carets(font: TTFont, half_width: int) -> None:
+    ligatures = _collect_ligature_components(font)
+    if not ligatures:
+        return
+
+    gdef = _ensure_gdef_table(font)
+    class_defs = _ensure_glyph_class_def(gdef)
+
+    coverage = otTables.Coverage()
+    coverage.glyphs = sorted(ligatures)
+
+    lig_glyphs: list[otTables.LigGlyph] = []
+    for glyph_name in coverage.glyphs:
+        components = ligatures[glyph_name]
+        class_defs[glyph_name] = 2
+
+        lig_glyph = otTables.LigGlyph()
+        caret_values: list[otTables.CaretValue] = []
+        for index in range(1, len(components)):
+            caret = otTables.CaretValue()
+            caret.Format = 1
+            caret.Coordinate = half_width * index
+            caret_values.append(caret)
+
+        lig_glyph.CaretValue = caret_values
+        lig_glyph.CaretCount = len(caret_values)
+        lig_glyphs.append(lig_glyph)
+
+    lig_caret_list = otTables.LigCaretList()
+    lig_caret_list.Coverage = coverage
+    lig_caret_list.LigGlyph = lig_glyphs
+    lig_caret_list.LigGlyphCount = len(lig_glyphs)
+    gdef.LigCaretList = lig_caret_list
+
+
+def _collect_ligature_components(font: TTFont) -> dict[str, tuple[str, ...]]:
+    if "GSUB" not in font:
+        return {}
+
+    ligatures: dict[str, tuple[str, ...]] = {}
+    for lookup in font["GSUB"].table.LookupList.Lookup:
+        if lookup.LookupType != 4:
+            continue
+        for subtable in lookup.SubTable:
+            for first_component, entries in getattr(subtable, "ligatures", {}).items():
+                for ligature in entries:
+                    components = (first_component, *ligature.Component)
+                    ligatures.setdefault(ligature.LigGlyph, components)
+    return ligatures
+
+
+def _ensure_gdef_table(font: TTFont) -> otTables.GDEF:
+    if "GDEF" not in font:
+        table = newTable("GDEF")
+        table.table = otTables.GDEF()
+        table.table.Version = 0x00010000
+        font["GDEF"] = table
+    gdef = font["GDEF"].table
+    if getattr(gdef, "Version", None) is None:
+        gdef.Version = 0x00010000
+    return gdef
+
+
+def _ensure_glyph_class_def(gdef: otTables.GDEF) -> dict[str, int]:
+    glyph_class_def = getattr(gdef, "GlyphClassDef", None)
+    if glyph_class_def is None:
+        glyph_class_def = otTables.ClassDef()
+        glyph_class_def.classDefs = {}
+        gdef.GlyphClassDef = glyph_class_def
+    elif glyph_class_def.classDefs is None:
+        glyph_class_def.classDefs = {}
+    return glyph_class_def.classDefs
 
 
 if __name__ == "__main__":

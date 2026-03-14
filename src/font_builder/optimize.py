@@ -51,11 +51,28 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             pass
         try:
+            glyph.canonicalContours()
+        except Exception:
+            pass
+        try:
+            glyph.canonicalStart()
+        except Exception:
+            pass
+        try:
             glyph.addExtrema("all")
         except Exception:
             pass
         try:
-            glyph.simplify()
+            glyph.round()
+        except Exception:
+            pass
+        try:
+            glyph.simplify(0.1)
+        except TypeError:
+            try:
+                glyph.simplify()
+            except Exception:
+                pass
         except Exception:
             pass
         optimized += 1

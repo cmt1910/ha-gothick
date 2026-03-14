@@ -182,7 +182,11 @@ if $DO_CLEAN; then
 fi
 
 if [[ "${HA_GOTHICK_BUILD_IN_CONTAINER:-0}" != "1" ]]; then
-    run_in_docker "${ORIGINAL_ARGS[@]}"
+    if [[ ${#ORIGINAL_ARGS[@]} -gt 0 ]]; then
+        run_in_docker "${ORIGINAL_ARGS[@]}"
+    else
+        run_in_docker
+    fi
     exit 0
 fi
 
