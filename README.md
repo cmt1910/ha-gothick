@@ -40,6 +40,12 @@ uv sync
 uv sync --extra dev
 ```
 
+CI と同じ手順で依存同期とソースフォント取得を行う場合:
+
+```bash
+bash scripts/setup_build_env.sh
+```
+
 ## ソースフォント配置
 
 以下のファイルを配置してからビルドしてください。
