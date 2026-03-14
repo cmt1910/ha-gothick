@@ -230,7 +230,7 @@ print('CapHeight:', font['OS/2'].sCapHeight)
 "
 ```
 
-4. **ウェイト対応の確認** — 本プロジェクトの出力ウェイトは Hack / BIZ UDゴシックともに `Regular` と `Bold` のみを対象とする
+1. **ウェイト対応の確認** — 本プロジェクトの出力ウェイトは Hack / BIZ UDゴシックともに `Regular` と `Bold` のみを対象とする
 
 #### 出力
 
@@ -986,13 +986,19 @@ jobs:
             ha-gothick-build-ci \
             bash ./validate.sh
 
+      - name: Package release assets
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          mkdir -p release
+          zip -j "release/ha-gothick-${GITHUB_REF_NAME}.zip" \
+            dist/*.ttf \
+            dist/LICENSE.txt \
+            dist/README.md
+
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: |
-            dist/*.ttf
-            dist/LICENSE.txt
-            dist/README.md
+          files: release/ha-gothick-${{ github.ref_name }}.zip
 ```
 
 `env.DOCKER_PLATFORM` は `linux/amd64` を指定する。
@@ -1000,11 +1006,8 @@ jobs:
 #### 9.5 リリース成果物
 
 ```text
-dist/
-├── HA-Gothick-Regular.ttf
-├── HA-Gothick-Bold.ttf
-├── LICENSE.txt
-└── README.md
+release/
+└── ha-gothick-v1.zip
 ```
 
 ---
