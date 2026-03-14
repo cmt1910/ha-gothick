@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG="${SCRIPT_DIR}/config/config.yaml"
 WEIGHTS=("Regular" "Bold")
+FONTBAKERY_SIZE_LIMIT=9000000
 
 log()  { printf "\033[1;34m[INFO]\033[0m  %s\n" "$*"; }
 warn() { printf "\033[1;33m[WARN]\033[0m  %s\n" "$*"; }
@@ -66,6 +67,7 @@ build_weight() {
     local weight="$1"
     local optimized="build/optimized-${weight}.ttf"
     local hinted="build/hinted-${weight}.ttf"
+    local final_input="${hinted}"
 
     log "=== Building weight: ${weight} ==="
 
@@ -100,12 +102,17 @@ build_weight() {
         cp "${optimized}" "${hinted}"
     fi
 
+    if [[ $(stat -f%z "${hinted}") -gt ${FONTBAKERY_SIZE_LIMIT} ]]; then
+        warn "ヒンティング後サイズが ${FONTBAKERY_SIZE_LIMIT} bytes を超過 — ヒンティングなし版を使用"
+        final_input="${optimized}"
+    fi
+
     mkdir -p dist
     log "[Phase 7.3] 最終メタデータ再適用 (${weight})"
     uv run python src/font_builder/patch_tables.py \
         --weight "${weight}" \
         --config "${CONFIG}" \
-        --input "${hinted}" \
+        --input "${final_input}" \
         --output "dist/HA-Gothick-${weight}.ttf"
     cp LICENSE "dist/LICENSE.txt"
     cp README.md "dist/README.md"
@@ -148,8 +155,8 @@ fi
 check_deps
 check_required_files
 
-log "uv sync — Python 依存パッケージの同期"
-uv sync
+log "uv sync --extra dev — Python 依存パッケージの同期"
+uv sync --extra dev
 
 mkdir -p build dist
 

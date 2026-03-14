@@ -34,6 +34,12 @@ sudo apt-get install -y fontforge python3-fontforge ttfautohint
 uv sync
 ```
 
+`fontbakery` を含む追加検証も使う場合:
+
+```bash
+uv sync --extra dev
+```
+
 ## ソースフォント配置
 
 以下のファイルを配置してからビルドしてください。
@@ -78,7 +84,7 @@ bash build.sh --clean
 bash validate.sh
 ```
 
-任意で `fontbakery` が入っている場合は追加チェックも実行します。TTX ダンプは `build/ttx/` に出力されます。
+`uv sync --extra dev` 済みなら `fontbakery check-universal` も実行します。TTX ダンプは `build/ttx/` に出力されます。
 
 ## 出力
 

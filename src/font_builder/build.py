@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import shutil
 
 from .common import check_commands, ensure_directories, final_font_path, run_command, stage_path
 from .config import BuildConfig, load_config
+
+FONTBAKERY_SIZE_LIMIT = 9_000_000
 
 
 def main() -> None:
@@ -55,15 +58,18 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
 
     optimized = stage_path(config, "optimized", weight, ".ttf")
     hinted = stage_path(config, "hinted", weight, ".ttf")
+    final_input = hinted
     if skip_hinting:
         hinted.write_bytes(optimized.read_bytes())
     else:
         result = _run_hinting(optimized, hinted, root)
         if not result:
             hinted.write_bytes(optimized.read_bytes())
+    if hinted.stat().st_size > FONTBAKERY_SIZE_LIMIT:
+        final_input = optimized
 
     final_path = final_font_path(config, weight)
-    final_path.write_bytes(hinted.read_bytes())
+    shutil.copyfile(final_input, final_path)
 
 
 def _run_hinting(optimized: Path, hinted: Path, root: Path) -> bool:
