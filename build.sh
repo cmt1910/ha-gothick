@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG="${SCRIPT_DIR}/config/config.yaml"
 WEIGHTS=("Regular" "Bold")
-FONTBAKERY_SIZE_LIMIT=9000000
 
 log()  { printf "\033[1;34m[INFO]\033[0m  %s\n" "$*"; }
 warn() { printf "\033[1;33m[WARN]\033[0m  %s\n" "$*"; }
@@ -100,11 +99,6 @@ build_weight() {
     else
         warn "ttfautohint 失敗 — ヒンティングなし版を使用"
         cp "${optimized}" "${hinted}"
-    fi
-
-    if [[ $(stat -f%z "${hinted}") -gt ${FONTBAKERY_SIZE_LIMIT} ]]; then
-        warn "ヒンティング後サイズが ${FONTBAKERY_SIZE_LIMIT} bytes を超過 — ヒンティングなし版を使用"
-        final_input="${optimized}"
     fi
 
     mkdir -p dist

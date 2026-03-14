@@ -7,8 +7,6 @@ import shutil
 from .common import check_commands, ensure_directories, final_font_path, run_command, stage_path
 from .config import BuildConfig, load_config
 
-FONTBAKERY_SIZE_LIMIT = 9_000_000
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="HA-Gothick build orchestrator")
@@ -65,9 +63,6 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
         result = _run_hinting(optimized, hinted, root)
         if not result:
             hinted.write_bytes(optimized.read_bytes())
-    if hinted.stat().st_size > FONTBAKERY_SIZE_LIMIT:
-        final_input = optimized
-
     final_path = final_font_path(config, weight)
     shutil.copyfile(final_input, final_path)
 
