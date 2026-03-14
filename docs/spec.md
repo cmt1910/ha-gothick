@@ -104,7 +104,6 @@ font-builder/
 │   └── rendering/            # 表示テスト用サンプルテキスト
 ├── build.sh                  # ビルドスクリプト (エントリポイント)
 ├── validate.sh               # 検証スクリプト (エントリポイント)
-├── Dockerfile
 ├── .github/workflows/
 │   └── build.yml
 ├── LICENSE
@@ -975,28 +974,23 @@ done
 exit ${EXIT_CODE}
 ```
 
-#### 9.3 Dockerfile
+#### 9.3 ローカル実行方針
 
-```dockerfile
-FROM ubuntu:24.04
+本プロジェクトでは Docker / コンテナは使用しない。ビルドと検証は、開発者のローカル環境または GitHub Actions ランナー上で直接実行する。
 
-RUN apt-get update && apt-get install -y \
-    fontforge \
-    python3-fontforge \
-    ttfautohint \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+- Python 依存は `uv sync` でセットアップする
+- `FontForge` と `ttfautohint` はホスト OS のパッケージマネージャで導入する
+- 対応環境は Ubuntu と macOS を基本とし、CI でも同じ手順を踏襲する
 
-# uv のインストール
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+```bash
+# Ubuntu
+sudo apt-get update
+sudo apt-get install -y fontforge python3-fontforge ttfautohint
+uv sync
 
-WORKDIR /workspace
-COPY . .
-
-# uv で依存をインストール
-RUN uv sync
-
-CMD ["bash", "build.sh"]
+# macOS
+brew install fontforge ttfautohint
+uv sync
 ```
 
 #### 9.4 GitHub Actions ワークフロー
