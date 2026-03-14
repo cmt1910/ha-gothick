@@ -1,0 +1,12 @@
+ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
+0123456789 0O 1lI `'" {}()[] <>
+あいうえおかきくけこさしすせそたちつてと
+アイウエオカキクケコサシスセソタチツテト
+一二三四五六七八九十百千万億兆
+ﾊﾝｶｸｶﾅ  （全角英数ＡＢＣＤ１２３４）
+─│┌┐└┘├┤┬┴┼  ═║╔╗╚╝╠╣╦╩╬
+→ ← ↑ ↓ ● ○ ■ □ ▲ △
+if (x == 0) { return "hello"; }  // コメント
+fn main() -> Result<(), Box<dyn Error>> {}
+λ α β γ δ ε ∀ ∃ ∈ ∉ ⊂ ⊃ ∪ ∩
+            

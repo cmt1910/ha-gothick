@@ -1,0 +1,56 @@
+font:
+  family_name: "HA-Gothick"
+  version: "1.0.0"
+  copyright: "Copyright 2026 HA-Gothick Contributors. Hack (c) Christopher Simpkins. BIZ UDGothic (c) Morisawa Inc."
+  license: "This Font Software is licensed under the SIL Open Font License, Version 1.1."
+  license_url: "https://openfontlicense.org"
+  vendor_url: "https://github.com/cmt1910/ha-gothick"
+
+metrics:
+  upm: 2048
+  half_width: 1233
+  full_width: 2466
+  ascender: 1556
+  descender: -492
+  line_gap: 0
+  typo_ascender: 1556
+  typo_descender: -492
+  typo_line_gap: 410
+  win_ascent: 1901
+  win_descent: 483
+  x_height: 1120
+  cap_height: 1493
+  is_fixed_pitch: true
+
+sources:
+  hack:
+    dir: "sources/hack"
+    original_upm: 2048
+  bizud:
+    dir: "sources/bizud"
+    original_upm: 1000
+  nerd:
+    dir: "sources/nerd"
+    file: "SymbolsNerdFont-Regular.ttf"
+
+weights:
+  - name: "Regular"
+    hack: "Hack-Regular.ttf"
+    bizud: "BIZUDGothic-Regular.ttf"
+  - name: "Bold"
+    hack: "Hack-Bold.ttf"
+    bizud: "BIZUDGothic-Bold.ttf"
+
+nerd_fonts:
+  include_sets:
+    - powerline
+    - powerline_extra
+    - font_awesome
+    - devicons
+    - octicons
+    - font_logos
+    - material_design
+    - weather
+    - codicons
+  exclude_sets:
+    - pomicons
