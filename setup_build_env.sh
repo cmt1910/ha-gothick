@@ -2,7 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PROJECT_ROOT="${SCRIPT_DIR}"
+PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 
 log()  { printf "\033[1;34m[INFO]\033[0m  %s\n" "$*"; }
 err()  { printf "\033[1;31m[ERROR]\033[0m %s\n" "$*" >&2; }
@@ -28,10 +29,10 @@ prepare_source_dirs() {
 }
 
 setup_python_deps() {
-    log "uv sync --extra dev — Python 依存パッケージの同期"
+    log "uv sync --extra dev --python ${PYTHON_VERSION} — Python 依存パッケージの同期"
     (
         cd "${PROJECT_ROOT}"
-        uv sync --extra dev
+        uv sync --extra dev --python "${PYTHON_VERSION}"
     )
 }
 

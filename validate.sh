@@ -35,11 +35,9 @@ for ttf in "${fonts[@]}"; do
     fi
 done
 
-if command -v fontbakery >/dev/null 2>&1 || uv run fontbakery --version >/dev/null 2>&1; then
-    log "fontbakery check-universal を実行"
-    uv run fontbakery check-universal "${fonts[@]}" -l WARN || warn "fontbakery が警告または失敗を返しました"
-else
-    log "fontbakery は未導入のためスキップ (uv sync --extra dev で有効化)"
+log "fontbakery check-universal を実行"
+if ! uv run fontbakery check-universal "${fonts[@]}" -l WARN -x file_size; then
+    EXIT_CODE=1
 fi
 
 log "TTX テーブルダンプを build/ttx/ に出力"
