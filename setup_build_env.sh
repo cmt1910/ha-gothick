@@ -36,11 +36,11 @@ setup_python_deps() {
 }
 
 download_hack_fonts() {
-    local hack_zip="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/Hack.zip"
+    local hack_zip="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/Hack-v3.003-ttf.zip"
     local hack_dir="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/hack-fonts"
 
     log "Hack フォントを取得"
-    curl -fL https://github.com/source-foundry/Hack/releases/latest/download/Hack.zip -o "${hack_zip}"
+    curl -fL https://github.com/source-foundry/Hack/releases/download/v3.003/Hack-v3.003-ttf.zip -o "${hack_zip}"
     rm -rf "${hack_dir}"
     unzip -q "${hack_zip}" -d "${hack_dir}"
     cp "$(find "${hack_dir}" -type f -name 'Hack-Regular.ttf' | head -n 1)" \
@@ -50,13 +50,19 @@ download_hack_fonts() {
 }
 
 download_bizud_fonts() {
+    local bizud_zip="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/morisawa-biz-ud-gothic-main.zip"
+    local bizud_dir="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/bizud-fonts"
+
     log "BIZ UDゴシックを取得"
     curl -fL \
-        https://raw.githubusercontent.com/googlefonts/morisawa-biz-ud-gothic/main/fonts/ttf/BIZUDGothic-Regular.ttf \
-        -o "${PROJECT_ROOT}/sources/bizud/BIZUDGothic-Regular.ttf"
-    curl -fL \
-        https://raw.githubusercontent.com/googlefonts/morisawa-biz-ud-gothic/main/fonts/ttf/BIZUDGothic-Bold.ttf \
-        -o "${PROJECT_ROOT}/sources/bizud/BIZUDGothic-Bold.ttf"
+        https://codeload.github.com/googlefonts/morisawa-biz-ud-gothic/zip/refs/heads/main \
+        -o "${bizud_zip}"
+    rm -rf "${bizud_dir}"
+    unzip -q "${bizud_zip}" -d "${bizud_dir}"
+    cp "$(find "${bizud_dir}" -type f -path '*/fonts/ttf/BIZUDGothic-Regular.ttf' | head -n 1)" \
+        "${PROJECT_ROOT}/sources/bizud/BIZUDGothic-Regular.ttf"
+    cp "$(find "${bizud_dir}" -type f -path '*/fonts/ttf/BIZUDGothic-Bold.ttf' | head -n 1)" \
+        "${PROJECT_ROOT}/sources/bizud/BIZUDGothic-Bold.ttf"
 }
 
 download_nerd_font() {
