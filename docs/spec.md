@@ -41,6 +41,7 @@ hhea LineGap:    0
 
 | カテゴリ | ツール | 用途 |
 |---|---|---|
+| 実行基盤 | **Docker** | ローカル / CI のビルド環境固定 (`linux/amd64`) |
 | パッケージ管理 | **uv** | Python プロジェクト管理・依存解決・仮想環境 |
 | テーブル操作 | **fontTools** (uv 経由で管理) | name / OS/2 / hhea 等のメタデータ編集、TTX ダンプ、サブセット化 |
 | グリフ操作 | **FontForge** (system Python bindings) | フォントの読み込み、スケーリング、マージ、アウトライン最適化 |
@@ -64,13 +65,14 @@ uv add pyyaml
 # 開発用依存
 uv add --dev fontbakery
 
-# FontForge と ttfautohint はシステムパッケージとして別途インストール
-# Ubuntu:  sudo apt install fontforge python3-fontforge ttfautohint
-# macOS:   brew install fontforge ttfautohint
+# ローカル / CI では Docker イメージ内に依存を閉じ込める
+# Docker イメージは Linux/amd64 でビルドする
 ```
 
 実行方針:
 
+- ローカルと CI のビルド・検証は Docker コンテナ内で実行する
+- Docker プラットフォームは `linux/amd64` を既定とし、Apple Silicon でも CI と同一条件に揃える
 - FontForge 依存スクリプト (`adjust_hack.py`, `adjust_bizud.py`, `merge.py`, `patch_nerd.py`, `optimize.py`) は `fontforge -script` で実行する
 - fontTools / PyYAML 依存スクリプト (`patch_tables.py`, `validate.py`) は `uv run python` で実行する
 - `python3-fontforge` はシステム Python に入るため、`uv run python` からは直接 import しない前提とする
@@ -105,6 +107,8 @@ font-builder/
 │       └── validate.py       # 検証スクリプト
 ├── build/                    # 中間生成物
 ├── dist/                     # 最終成果物
+├── Dockerfile                # ビルド用 Docker イメージ定義
+├── .dockerignore             # Docker ビルド除外設定
 ├── tests/
 │   └── rendering/            # 表示テスト用サンプルテキスト
 ├── build.sh                  # ビルドスクリプト (エントリポイント)
@@ -792,141 +796,36 @@ fn main() -> Result<(), Box<dyn Error>> {}
 
 #### 9.1 ビルドスクリプト (`build.sh`)
 
+`build.sh` は二段構成とする。
+
+- ホスト実行時:
+  Docker イメージを `--platform linux/amd64` でビルドし、コンテナ内で同じ `build.sh` を再実行する
+- コンテナ内実行時:
+  既存の FontForge / `uv` / `ttfautohint` ベースのビルド本体を実行する
+
+主要な環境変数:
+
+- `DOCKER_IMAGE`
+  使用するイメージ名。既定値は `ha-gothick-build:latest`
+- `DOCKER_PLATFORM`
+  Docker プラットフォーム。既定値は `linux/amd64`
+- `HA_GOTHICK_BUILD_IN_CONTAINER`
+  コンテナ内実行フラグ。ホストからの直接指定は不要
+
+ホスト側の実行イメージ:
+
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# ============================================================
-# build.sh — HA-Gothick フォントビルドスクリプト
-# ============================================================
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG="${SCRIPT_DIR}/config/config.yaml"
-WEIGHTS=("Regular" "Bold")
-
-# --- ヘルパー関数 ---
-
-log()  { printf "\033[1;34m[INFO]\033[0m  %s\n" "$*"; }
-warn() { printf "\033[1;33m[WARN]\033[0m  %s\n" "$*"; }
-err()  { printf "\033[1;31m[ERROR]\033[0m %s\n" "$*" >&2; }
-
-usage() {
-    cat <<EOF
-Usage: $(basename "$0") [options]
-
-Options:
-  --weight <name>   単一ウェイトのみビルド (Regular|Bold)
-  --config <path>   config.yaml のパスを指定 (デフォルト: config/config.yaml)
-  --clean           build/ と dist/ を削除して終了
-  --help            このヘルプを表示
-EOF
-    exit 0
-}
-
-check_deps() {
-    local missing=()
-    command -v uv        >/dev/null 2>&1 || missing+=("uv")
-    command -v fontforge >/dev/null 2>&1 || missing+=("fontforge")
-    command -v ttfautohint >/dev/null 2>&1 || missing+=("ttfautohint")
-    if [[ ${#missing[@]} -gt 0 ]]; then
-        err "以下の依存ツールが見つかりません: ${missing[*]}"
-        err "インストール方法:"
-        err "  uv          — https://docs.astral.sh/uv/"
-        err "  fontforge   — sudo apt install fontforge python3-fontforge"
-        err "  ttfautohint — sudo apt install ttfautohint"
-        exit 1
-    fi
-}
-
-build_weight() {
-    local weight="$1"
-    log "=== Building weight: ${weight} ==="
-
-    log "[Phase 2] Hack フォント加工 (${weight})"
-    fontforge -script src/font_builder/adjust_hack.py \
-        --weight "${weight}" --config "${CONFIG}"
-
-    log "[Phase 3] BIZ UDゴシック加工 (${weight})"
-    fontforge -script src/font_builder/adjust_bizud.py \
-        --weight "${weight}" --config "${CONFIG}"
-
-    log "[Phase 4] フォント合成 (${weight})"
-    fontforge -script src/font_builder/merge.py \
-        --weight "${weight}" --config "${CONFIG}"
-
-    log "[Phase 5] Nerd Fonts パッチ (${weight})"
-    fontforge -script src/font_builder/patch_nerd.py \
-        --weight "${weight}" --config "${CONFIG}"
-
-    log "[Phase 6] メタデータ調整 (${weight})"
-    uv run python src/font_builder/patch_tables.py \
-        --weight "${weight}" --config "${CONFIG}"
-
-    log "[Phase 7.1] アウトライン最適化 (${weight})"
-    fontforge -script src/font_builder/optimize.py \
-        --weight "${weight}" --config "${CONFIG}"
-
-    log "[Phase 7.2] ヒンティング (${weight})"
-    local optimized="build/optimized-${weight}.ttf"
-    local hinted="build/hinted-${weight}.ttf"
-    if ttfautohint \
-        --stem-width-mode=nnn \
-        --increase-x-height=14 \
-        --no-info \
-        --fallback-script=latn \
-        "${optimized}" "${hinted}" 2>/dev/null; then
-        log "ttfautohint 成功"
-    else
-        warn "ttfautohint 失敗 — ヒンティングなし版を使用"
-        cp "${optimized}" "${hinted}"
-    fi
-
-    mkdir -p dist
-    cp "${hinted}" "dist/HA-Gothick-${weight}.ttf"
-    cp LICENSE "dist/LICENSE.txt"
-    cp README.md "dist/README.md"
-    log "=== Done: dist/HA-Gothick-${weight}.ttf ==="
-}
-
-# --- 引数パース ---
-
-TARGET_WEIGHT=""
-DO_CLEAN=false
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --weight)  TARGET_WEIGHT="$2"; shift 2 ;;
-        --config)  CONFIG="$2";        shift 2 ;;
-        --clean)   DO_CLEAN=true;      shift   ;;
-        --help|-h) usage ;;
-        *)         err "不明なオプション: $1"; usage ;;
-    esac
-done
-
-# --- メイン処理 ---
-
-if $DO_CLEAN; then
-    log "build/ と dist/ を削除"
-    rm -rf build/ dist/
-    exit 0
-fi
-
-check_deps
-
-log "uv sync — Python 依存パッケージの同期"
-uv sync
-
-mkdir -p build dist
-
-if [[ -n "${TARGET_WEIGHT}" ]]; then
-    build_weight "${TARGET_WEIGHT}"
-else
-    for w in "${WEIGHTS[@]}"; do
-        build_weight "${w}"
-    done
-fi
-
-log "ビルド完了"
+docker build --platform linux/amd64 -t ha-gothick-build:latest .
+docker run --rm \
+  --platform linux/amd64 \
+  --user "$(id -u):$(id -g)" \
+  -e HOME=/tmp/ha-gothick-home \
+  -e UV_CACHE_DIR=/work/.uv-cache \
+  -e HA_GOTHICK_BUILD_IN_CONTAINER=1 \
+  -v "$PWD:/work" \
+  -w /work \
+  ha-gothick-build:latest \
+  bash ./build.sh
 ```
 
 #### 9.2 検証スクリプト (`validate.sh`)
@@ -978,22 +877,38 @@ exit ${EXIT_CODE}
 
 #### 9.3 ローカル実行方針
 
-本プロジェクトでは Docker / コンテナは使用しない。ビルドと検証は、開発者のローカル環境または GitHub Actions ランナー上で直接実行する。
+本プロジェクトのローカル実行は Docker 前提とする。ホストに直接必要なのは `docker` のみで、FontForge / `ttfautohint` / `uv` は Docker イメージ内に閉じ込める。
 
-- Python 依存は `uv sync` でセットアップする
-- `FontForge` と `ttfautohint` はホスト OS のパッケージマネージャで導入する
-- FontForge 系スクリプトは `fontforge -script` で、fontTools 系スクリプトは `uv run python` で実行する
-- 対応環境は Ubuntu と macOS を基本とし、CI でも同じ手順を踏襲する
+- ローカル実行と GitHub Actions の差分を減らすため、`linux/amd64` を既定とする
+- `setup_build_env.sh` はソースフォント取得と `uv sync --extra dev --python 3.12` を行う
+- `build.sh` はホスト側で Docker イメージをビルドし、コンテナ内でビルド本体を実行する
+- `validate.sh` は生成済み成果物に対して `src/font_builder/validate.py`、`fontbakery`、`ttx` を実行する
 
 ```bash
-# Ubuntu
-sudo apt-get update
-sudo apt-get install -y fontforge python3-fontforge ttfautohint
-uv sync
+# 前処理
+docker run --rm \
+  --platform linux/amd64 \
+  --user "$(id -u):$(id -g)" \
+  -e HOME=/tmp/ha-gothick-home \
+  -e UV_CACHE_DIR=/work/.uv-cache \
+  -v "$PWD:/work" \
+  -w /work \
+  ha-gothick-build:latest \
+  bash ./setup_build_env.sh
 
-# macOS
-brew install fontforge ttfautohint
-uv sync
+# ビルド
+bash ./build.sh
+
+# 検証
+docker run --rm \
+  --platform linux/amd64 \
+  --user "$(id -u):$(id -g)" \
+  -e HOME=/tmp/ha-gothick-home \
+  -e UV_CACHE_DIR=/work/.uv-cache \
+  -v "$PWD:/work" \
+  -w /work \
+  ha-gothick-build:latest \
+  bash -lc './validate.sh'
 ```
 
 #### 9.4 GitHub Actions ワークフロー
@@ -1007,28 +922,53 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+env:
+  DOCKER_PLATFORM: linux/amd64
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Build Docker image
         run: |
-          sudo apt-get update
-          sudo apt-get install -y fontforge python3-fontforge ttfautohint
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install Python dependencies
-        run: uv sync
+          docker build --platform "${DOCKER_PLATFORM}" -t ha-gothick-build-ci .
 
       - name: Build fonts
-        run: bash build.sh
+        run: |
+          docker run --rm \
+            --platform "${DOCKER_PLATFORM}" \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/ha-gothick-home \
+            -e UV_CACHE_DIR=/work/.uv-cache \
+            -v "${GITHUB_WORKSPACE}:/work" \
+            -w /work \
+            ha-gothick-build-ci \
+            bash ./setup_build_env.sh
+
+          docker run --rm \
+            --platform "${DOCKER_PLATFORM}" \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/ha-gothick-home \
+            -e UV_CACHE_DIR=/work/.uv-cache \
+            -e HA_GOTHICK_BUILD_IN_CONTAINER=1 \
+            -v "${GITHUB_WORKSPACE}:/work" \
+            -w /work \
+            ha-gothick-build-ci \
+            bash ./build.sh
 
       - name: Validate fonts
-        run: bash validate.sh
+        run: |
+          docker run --rm \
+            --platform "${DOCKER_PLATFORM}" \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/ha-gothick-home \
+            -e UV_CACHE_DIR=/work/.uv-cache \
+            -v "${GITHUB_WORKSPACE}:/work" \
+            -w /work \
+            ha-gothick-build-ci \
+            bash ./validate.sh
 
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
@@ -1038,6 +978,8 @@ jobs:
             dist/LICENSE.txt
             dist/README.md
 ```
+
+`env.DOCKER_PLATFORM` は `linux/amd64` を指定する。
 
 #### 9.5 リリース成果物
 
