@@ -43,7 +43,7 @@ hhea LineGap:    0
 |---|---|---|
 | パッケージ管理 | **uv** | Python プロジェクト管理・依存解決・仮想環境 |
 | テーブル操作 | **fontTools** (uv 経由で管理) | name / OS/2 / hhea 等のメタデータ編集、TTX ダンプ、サブセット化 |
-| グリフ操作 | **FontForge** (Python bindings) | フォントの読み込み、スケーリング、マージ |
+| グリフ操作 | **FontForge** (system Python bindings) | フォントの読み込み、スケーリング、マージ、アウトライン最適化 |
 | ヒンティング | **ttfautohint** | TrueType 自動ヒンティング |
 
 補助ツール（fontTools に付属、または検証用）:
@@ -68,6 +68,12 @@ uv add --dev fontbakery
 # Ubuntu:  sudo apt install fontforge python3-fontforge ttfautohint
 # macOS:   brew install fontforge ttfautohint
 ```
+
+実行方針:
+
+- FontForge 依存スクリプト (`adjust_hack.py`, `adjust_bizud.py`, `merge.py`, `patch_nerd.py`, `optimize.py`) は `fontforge -script` で実行する
+- fontTools / PyYAML 依存スクリプト (`patch_tables.py`, `validate.py`) は `uv run python` で実行する
+- `python3-fontforge` はシステム Python に入るため、`uv run python` からは直接 import しない前提とする
 
 ### 1.5 ディレクトリ構成
 
@@ -94,6 +100,7 @@ font-builder/
 │       ├── adjust_bizud.py   # BIZ UDゴシック加工
 │       ├── merge.py          # フォント合成
 │       ├── patch_nerd.py     # Nerd Fonts グリフパッチ
+│       ├── optimize.py       # アウトライン最適化
 │       ├── patch_tables.py   # メタデータ調整 (fontTools)
 │       └── validate.py       # 検証スクリプト
 ├── build/                    # 中間生成物
@@ -379,7 +386,7 @@ U+0000 ~ U+00FF  Basic Latin + Latin-1 Supplement
 U+0100 ~ U+024F  Latin Extended-A/B
 ```
 
-ただし以下は BIZ UDゴシック側のグリフを保持する:
+ただし以下はフェーズ 4 で BIZ UDゴシック側のグリフを優先採用するため、削除対象から除外する:
 
 ```
 保持対象:
@@ -415,9 +422,13 @@ U+203E  ‾ (オーバーライン)
 ```python
 base = fontforge.open("build/hack_adjusted.sfd")
 base.mergeFonts("build/bizud_adjusted.sfd")
+
+# 例外コードポイントのみ BIZ UDゴシック側を優先採用
+for codepoint in (0x00A5, 0x203E):
+    copy_glyph_from_bizud(base, "build/bizud_adjusted.sfd", codepoint)
 ```
 
-Hack をベースとし、BIZ UDゴシックのグリフを追加統合する。既存グリフは上書きされないため、フェーズ 3.5 での除去処理が前提となる。
+Hack をベースとし、BIZ UDゴシックのグリフを追加統合する。既存グリフは上書きされないため、フェーズ 3.5 での除去処理を前提としつつ、`U+00A5` / `U+203E` はマージ後に明示的に BIZ UDゴシック由来へ置換する。
 
 ##### 4.2 グリフ優先度の解決
 
@@ -427,9 +438,10 @@ Hack をベースとし、BIZ UDゴシックのグリフを追加統合する。
 |---|---|---|
 | U+0020 ~ U+007E | Hack | ASCII は Hack のデザインを維持 |
 | U+00A5 (¥) | BIZ UDゴシック | 日本語環境での慣例 |
+| U+203E (‾) | BIZ UDゴシック | 日本語環境での慣例 |
 | U+2500 ~ U+257F (罫線) | Hack | プログラミング用途で半角幅が自然 |
 | U+FF01 ~ U+FF5E (全角英数) | BIZ UDゴシック | 全角幅を維持 |
-| U+E0A0 ~ U+E0D4 (Powerline) | Nerd Fonts (フェーズ 5 で上書き) | 統一的な Nerd Fonts アイコンを使用 |
+| U+E0A0 ~ U+E0D4 (Powerline) | Nerd Fonts (フェーズ 5 で明示置換) | 統一的な Nerd Fonts アイコンを使用 |
 
 ##### 4.3 スペース文字の幅設定
 
@@ -466,26 +478,9 @@ U+2003 (Em Space)     → full_width  (2466)
 
 #### 処理
 
-##### 5.1 パッチ方式の選択
+##### 5.1 パッチ方式
 
-Nerd Fonts グリフの統合には以下の2つの方式がある:
-
-**方式 A: Nerd Fonts 公式 font-patcher を使用**
-
-```bash
-fontforge -script /path/to/font-patcher \
-  build/merged.ttf \
-  --complete \
-  --careful \
-  --mono \
-  --outputdir build/
-```
-
-- `--complete` — 全グリフセットをパッチ（`--pomicons` を除く）
-- `--careful` — 既存グリフを上書きしない
-- `--mono` — 等幅用のシングルワイズグリフを生成
-
-**方式 B: 自前で FontForge スクリプトによるマージ**
+本プロジェクトでは `SymbolsNerdFont-Regular.ttf` を直接読み込み、`patch_nerd.py` で必要なグリフだけを選択的にマージする。これにより、Powerline 範囲のみを Nerd Fonts 由来に明示置換し、それ以外の既存グリフは保持できる。
 
 ```python
 merged = fontforge.open("build/merged.ttf")
@@ -495,16 +490,17 @@ nerd = fontforge.open("sources/nerd/SymbolsNerdFont-Regular.ttf")
 for glyph in nerd.glyphs():
     codepoint = glyph.unicode
     if is_target_nerd_glyph(codepoint):
-        # グリフを half_width にスケーリング
-        scale = half_width / glyph.width if glyph.width > 0 else 1.0
-        glyph.transform(psMat.scale(scale, scale))
-        glyph.width = half_width
-        # マージ先に挿入
-        merged.selection.select(codepoint)
-        merged.paste()
+        # Powerline 範囲は置換、それ以外は未使用コードポイントへの追加のみ許可
+        if codepoint in POWERLINE_CODEPOINTS or not merged_has_glyph(merged, codepoint):
+            # グリフを half_width にスケーリング
+            scale = half_width / glyph.width if glyph.width > 0 else 1.0
+            glyph.transform(psMat.scale(scale, scale))
+            glyph.width = half_width
+            # マージ先に挿入
+            paste_glyph(merged, nerd, codepoint)
 ```
 
-推奨: **方式 A** を基本とし、公式 patcher の動作に問題がある場合のみ方式 B にフォールバックする。
+Nerd Fonts 公式 `font-patcher` は参考実装として扱う。`--careful` を付けると Powerline を置換できず、外すと意図しない上書き範囲が広がるため、本仕様の標準フローには採用しない。
 
 ##### 5.2 対象グリフセットと Unicode 範囲
 
@@ -526,7 +522,7 @@ Codicons:            U+EA60 ~ U+EC00
 
 等幅フォントとして、Nerd Fonts グリフはすべて `half_width` (1233) に収める:
 
-- ダブルワイズグリフ → `half_width` にスケーリング（`--mono` オプションで自動処理）
+- ダブルワイズグリフ → `half_width` にスケーリング（`patch_nerd.py` 内で明示処理）
 - グリフが半角幅に収まるよう中央揃え
 
 #### 出力
@@ -537,7 +533,8 @@ Codicons:            U+EA60 ~ U+EC00
 
 - Powerline 記号（U+E0A0〜U+E0D4）が存在すること
 - 全 Nerd Fonts グリフの advance width が `half_width` であること
-- 既存の Hack / BIZ UDゴシック グリフが上書きされていないこと（`--careful` 指定時）
+- Powerline 範囲（U+E0A0〜U+E0D4）のみ Nerd Fonts 由来に置換されていること
+- Powerline 範囲以外の既存 Hack / BIZ UDゴシック グリフが上書きされていないこと
 - Pomicons が含まれていないこと
 
 ---
@@ -665,7 +662,7 @@ post.isFixedPitch = 1  # 等幅フォントであることを宣言
 
 ##### 7.1 アウトライン最適化
 
-FontForge を使用して以下を実行:
+FontForge スクリプト `src/font_builder/optimize.py` を使用して以下を実行:
 
 1. **オーバーラップ除去** — `removeOverlap()` で重複パスを統合
 2. **パス方向の統一** — TrueType: 外郭は時計回り、内郭は反時計回り
@@ -680,7 +677,7 @@ ttfautohint \
   --increase-x-height=14 \
   --no-info \
   --fallback-script=latn \
-  build/patched.ttf \
+  build/optimized.ttf \
   build/hinted.ttf
 ```
 
@@ -706,6 +703,7 @@ uv run pyftsubset build/hinted.ttf \
 
 #### 出力
 
+- アウトライン最適化済みフォント (`build/optimized.ttf`)
 - 最終フォントファイル (`dist/HA-Gothick-Regular.ttf`)
 
 ---
@@ -845,42 +843,48 @@ build_weight() {
     log "=== Building weight: ${weight} ==="
 
     log "[Phase 2] Hack フォント加工 (${weight})"
-    uv run python src/font_builder/adjust_hack.py \
+    fontforge -script src/font_builder/adjust_hack.py \
         --weight "${weight}" --config "${CONFIG}"
 
     log "[Phase 3] BIZ UDゴシック加工 (${weight})"
-    uv run python src/font_builder/adjust_bizud.py \
+    fontforge -script src/font_builder/adjust_bizud.py \
         --weight "${weight}" --config "${CONFIG}"
 
     log "[Phase 4] フォント合成 (${weight})"
-    uv run python src/font_builder/merge.py \
+    fontforge -script src/font_builder/merge.py \
         --weight "${weight}" --config "${CONFIG}"
 
     log "[Phase 5] Nerd Fonts パッチ (${weight})"
-    uv run python src/font_builder/patch_nerd.py \
+    fontforge -script src/font_builder/patch_nerd.py \
         --weight "${weight}" --config "${CONFIG}"
 
     log "[Phase 6] メタデータ調整 (${weight})"
     uv run python src/font_builder/patch_tables.py \
         --weight "${weight}" --config "${CONFIG}"
 
-    log "[Phase 7] ヒンティング (${weight})"
-    local patched="build/patched-${weight}.ttf"
+    log "[Phase 7.1] アウトライン最適化 (${weight})"
+    fontforge -script src/font_builder/optimize.py \
+        --weight "${weight}" --config "${CONFIG}"
+
+    log "[Phase 7.2] ヒンティング (${weight})"
+    local optimized="build/optimized-${weight}.ttf"
     local hinted="build/hinted-${weight}.ttf"
     if ttfautohint \
         --stem-width-mode=nnn \
         --increase-x-height=14 \
         --no-info \
         --fallback-script=latn \
-        "${patched}" "${hinted}" 2>/dev/null; then
+        "${optimized}" "${hinted}" 2>/dev/null; then
         log "ttfautohint 成功"
     else
         warn "ttfautohint 失敗 — ヒンティングなし版を使用"
-        cp "${patched}" "${hinted}"
+        cp "${optimized}" "${hinted}"
     fi
 
     mkdir -p dist
     cp "${hinted}" "dist/HA-Gothick-${weight}.ttf"
+    cp LICENSE "dist/LICENSE.txt"
+    cp README.md "dist/README.md"
     log "=== Done: dist/HA-Gothick-${weight}.ttf ==="
 }
 
@@ -978,6 +982,7 @@ exit ${EXIT_CODE}
 
 - Python 依存は `uv sync` でセットアップする
 - `FontForge` と `ttfautohint` はホスト OS のパッケージマネージャで導入する
+- FontForge 系スクリプトは `fontforge -script` で、fontTools 系スクリプトは `uv run python` で実行する
 - 対応環境は Ubuntu と macOS を基本とし、CI でも同じ手順を踏襲する
 
 ```bash
@@ -1028,7 +1033,10 @@ jobs:
       - uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: dist/*.ttf
+          files: |
+            dist/*.ttf
+            dist/LICENSE.txt
+            dist/README.md
 ```
 
 #### 9.5 リリース成果物
