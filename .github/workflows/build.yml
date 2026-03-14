@@ -6,6 +6,9 @@ on:
       - "v*"
   workflow_dispatch:
 
+env:
+  DOCKER_PLATFORM: linux/amd64
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -13,28 +16,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Build Docker image
         run: |
-          sudo apt-get update
-          sudo apt-get install -y fontforge python3-fontforge ttfautohint unzip xz-utils
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        if: ${{ !env.ACT }}
-        with:
-          python-version: "3.12"
-
-      - name: Setup build environment
-        run: bash setup_build_env.sh
+          docker build --platform "${DOCKER_PLATFORM}" -t ha-gothick-build-ci .
 
       - name: Build fonts
-        run: bash build.sh
+        run: |
+          docker run --rm \
+            --platform "${DOCKER_PLATFORM}" \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/ha-gothick-home \
+            -e UV_CACHE_DIR=/work/.uv-cache \
+            -v "${GITHUB_WORKSPACE}:/work" \
+            -w /work \
+            ha-gothick-build-ci \
+            bash ./setup_build_env.sh
+
+          docker run --rm \
+            --platform "${DOCKER_PLATFORM}" \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/ha-gothick-home \
+            -e UV_CACHE_DIR=/work/.uv-cache \
+            -e HA_GOTHICK_BUILD_IN_CONTAINER=1 \
+            -v "${GITHUB_WORKSPACE}:/work" \
+            -w /work \
+            ha-gothick-build-ci \
+            bash ./build.sh
 
       - name: Validate fonts
-        run: bash validate.sh
+        run: |
+          docker run --rm \
+            --platform "${DOCKER_PLATFORM}" \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/ha-gothick-home \
+            -e UV_CACHE_DIR=/work/.uv-cache \
+            -v "${GITHUB_WORKSPACE}:/work" \
+            -w /work \
+            ha-gothick-build-ci \
+            bash ./validate.sh
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

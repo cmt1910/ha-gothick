@@ -1,0 +1,10 @@
+.git
+.github
+.venv
+.uv-cache
+.uv-python
+__pycache__
+build
+dist
+sources
+.DS_Store
