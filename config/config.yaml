@@ -21,6 +21,7 @@ metrics:
   x_height: 1120
   cap_height: 1493
   is_fixed_pitch: true
+  bizud_visual_scale: 0.94
 
 sources:
   hack:

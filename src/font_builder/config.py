@@ -44,6 +44,7 @@ class MetricsConfig:
     cap_height: int
     is_fixed_pitch: bool
     y_offset: int | None = None
+    bizud_visual_scale: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -185,6 +186,7 @@ def load_config(config_path: str | Path) -> BuildConfig:
                 if metrics_raw.get("y_offset") is not None
                 else None
             ),
+            bizud_visual_scale=float(metrics_raw.get("bizud_visual_scale", 1.0)),
         ),
         sources=sources,
         weights=tuple(weights),
