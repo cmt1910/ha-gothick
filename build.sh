@@ -101,7 +101,12 @@ build_weight() {
     fi
 
     mkdir -p dist
-    cp "${hinted}" "dist/HA-Gothick-${weight}.ttf"
+    log "[Phase 7.3] 最終メタデータ再適用 (${weight})"
+    uv run python src/font_builder/patch_tables.py \
+        --weight "${weight}" \
+        --config "${CONFIG}" \
+        --input "${hinted}" \
+        --output "dist/HA-Gothick-${weight}.ttf"
     cp LICENSE "dist/LICENSE.txt"
     cp README.md "dist/README.md"
     log "=== Done: dist/HA-Gothick-${weight}.ttf ==="

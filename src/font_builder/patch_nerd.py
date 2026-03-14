@@ -46,12 +46,18 @@ def in_ranges(codepoint: int, ranges: tuple[tuple[int, int], ...]) -> bool:
 
 
 def glyph_exists(font, codepoint: int) -> bool:
-    glyph = font[codepoint]
+    try:
+        glyph = font[codepoint]
+    except (TypeError, ValueError):
+        return False
     return glyph is not None and glyph.isWorthOutputting()
 
 
 def copy_glyph(source_font, destination_font, codepoint: int) -> bool:
-    glyph = source_font[codepoint]
+    try:
+        glyph = source_font[codepoint]
+    except (TypeError, ValueError):
+        return False
     if glyph is None or not glyph.isWorthOutputting():
         return False
     source_font.selection.none()

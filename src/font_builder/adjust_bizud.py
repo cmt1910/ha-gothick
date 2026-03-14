@@ -57,7 +57,10 @@ def iter_range_list(ranges: tuple[tuple[int, int], ...]) -> Iterable[int]:
 
 
 def glyph_exists(font, codepoint: int) -> bool:
-    glyph = font[codepoint]
+    try:
+        glyph = font[codepoint]
+    except (TypeError, ValueError):
+        return False
     return glyph is not None and glyph.isWorthOutputting()
 
 

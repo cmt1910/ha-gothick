@@ -42,7 +42,10 @@ def iter_target_codepoints() -> Iterable[int]:
 
 
 def glyph_exists(font, codepoint: int) -> bool:
-    glyph = font[codepoint]
+    try:
+        glyph = font[codepoint]
+    except (TypeError, ValueError):
+        return False
     return glyph is not None and glyph.isWorthOutputting()
 
 

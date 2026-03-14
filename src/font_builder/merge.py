@@ -36,7 +36,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def copy_glyph(source_font, destination_font, codepoint: int) -> bool:
-    glyph = source_font[codepoint]
+    try:
+        glyph = source_font[codepoint]
+    except (TypeError, ValueError):
+        return False
     if glyph is None or not glyph.isWorthOutputting():
         return False
     source_font.selection.none()

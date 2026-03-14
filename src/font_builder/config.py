@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
+import shutil
+import subprocess
 from typing import Any
 
-import yaml
+try:
+    import yaml
+except ImportError:  # FontForge system Python may not have PyYAML.
+    yaml = None
 
 
 class ConfigError(RuntimeError):
@@ -198,7 +204,34 @@ def _require_mapping(raw: dict[str, Any], key: str) -> dict[str, Any]:
 
 
 def _load_yaml_with_fallback(path: Path) -> dict[str, Any]:
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if yaml is not None:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    else:
+        uv = shutil.which("uv")
+        if uv is None:
+            raise ConfigError("PyYAML is unavailable and uv was not found for config loading")
+        command = [
+            uv,
+            "run",
+            "python",
+            "-c",
+            (
+                "import json, pathlib, yaml; "
+                "print(json.dumps(yaml.safe_load(pathlib.Path(__import__('sys').argv[1]).read_text(encoding='utf-8'))))"
+            ),
+            str(path),
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as error:
+            message = error.stderr.strip() or error.stdout.strip() or str(error)
+            raise ConfigError(f"Failed to load config via uv: {message}") from error
+        data = json.loads(completed.stdout)
     if not isinstance(data, dict):
         raise ConfigError("config root must be a mapping")
     return data
