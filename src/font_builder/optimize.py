@@ -37,15 +37,16 @@ def main(argv: list[str] | None = None) -> int:
     output = output_path(config, args.weight)
     output.parent.mkdir(parents=True, exist_ok=True)
 
+    # 字形を変化させる恐れがある処理はコメントアウト
     font = fontforge.open(str(input_path))
     optimized = 0
     for glyph in font.glyphs():
         if not glyph.isWorthOutputting():
             continue
-        try:
-            glyph.removeOverlap()
-        except Exception:
-            pass
+        # try:
+        #     glyph.removeOverlap()
+        # except Exception:
+        #     pass
         try:
             glyph.correctDirection()
         except Exception:
@@ -58,23 +59,23 @@ def main(argv: list[str] | None = None) -> int:
             glyph.canonicalStart()
         except Exception:
             pass
-        try:
-            glyph.addExtrema("all")
-        except Exception:
-            pass
-        try:
-            glyph.round()
-        except Exception:
-            pass
-        try:
-            glyph.simplify(0.1)
-        except TypeError:
-            try:
-                glyph.simplify()
-            except Exception:
-                pass
-        except Exception:
-            pass
+        # try:
+        #     glyph.addExtrema("all")
+        # except Exception:
+        #     pass
+        # try:
+        #     glyph.round()
+        # except Exception:
+        #     pass
+        # try:
+        #     glyph.simplify(0.1)
+        # except TypeError:
+        #     try:
+        #         glyph.simplify()
+        #     except Exception:
+        #         pass
+        # except Exception:
+        #     pass
         optimized += 1
 
     font.generate(str(output))
