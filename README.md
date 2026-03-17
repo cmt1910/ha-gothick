@@ -124,6 +124,14 @@ uv run ruff check .
 uv run ruff check . --fix
 ```
 
+## Format
+
+Lintと同様に`Ruff`を使用します。
+
+```bash
+uv run ruff format .
+```
+
 ## 出力
 
 ビルド成功時の成果物:
