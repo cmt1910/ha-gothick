@@ -723,7 +723,7 @@ fn main() -> Result<(), Box<dyn Error>> {}
 2. `linux/amd64` 指定で CI 用 Docker イメージをビルドする。
 3. 同一イメージ内で `setup_build_env.sh` と `build.sh` を順に実行する。
 4. 同一イメージ内で `validate.sh` を実行する。
-5. タグビルド時のみ `dist/*.ttf`、`dist/LICENSE.txt`、`dist/README.md` を zip 化する。
+5. タグビルド時のみ `dist/*.ttf`、`dist/LICENSE.txt` を zip 化する。
 6. タグビルド時のみ GitHub Releases に成果物を添付する。
 
 #### 9.5 リリース成果物

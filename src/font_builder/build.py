@@ -41,7 +41,6 @@ def main() -> None:
         build_weight(config, weight.name, skip_hinting=args.skip_hinting)
 
     shutil.copy2(config.project_root / "LICENSE", config.dist_dir / "LICENSE.txt")
-    shutil.copy2(config.project_root / "README.md", config.dist_dir / "README.md")
 
 
 def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> None:
