@@ -2,19 +2,10 @@ from __future__ import annotations
 
 import argparse
 import sys
-from functools import cache
-from importlib import import_module
 from pathlib import Path
 
 from font_builder.config import BuildConfig, load_config
-
-
-@cache
-def _load_fontforge_modules() -> tuple[object, object]:
-    fontforge_module = import_module("fontforge")
-    ps_mat_module = import_module("psMat")
-    return fontforge_module, ps_mat_module
-
+from font_builder.ff_utils import copy_glyph, glyph_exists, load_fontforge_modules
 
 NERD_SET_RANGES = {
     "powerline": ((0xE0A0, 0xE0A3), (0xE0B0, 0xE0D4)),
@@ -33,7 +24,7 @@ POWERLINE_RANGES = NERD_SET_RANGES["powerline"]
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Patch Nerd Fonts glyphs.")
-    parser.add_argument("--weight", required=True, choices=("Regular", "Bold"))
+    parser.add_argument("--weight", required=True)
     parser.add_argument("--config", required=True)
     return parser.parse_args(argv)
 
@@ -42,32 +33,8 @@ def in_ranges(codepoint: int, ranges: tuple[tuple[int, int], ...]) -> bool:
     return any(start <= codepoint <= end for start, end in ranges)
 
 
-def glyph_exists(font, codepoint: int) -> bool:
-    try:
-        glyph = font[codepoint]
-    except (TypeError, ValueError):
-        return False
-    return glyph is not None and glyph.isWorthOutputting()
-
-
-def copy_glyph(source_font, destination_font, codepoint: int) -> bool:
-    try:
-        glyph = source_font[codepoint]
-    except (TypeError, ValueError):
-        return False
-    if glyph is None or not glyph.isWorthOutputting():
-        return False
-    source_font.selection.none()
-    destination_font.selection.none()
-    source_font.selection.select(("unicode",), codepoint)
-    source_font.copy()
-    destination_font.selection.select(("unicode",), codepoint)
-    destination_font.paste()
-    return True
-
-
-def normalize_width(glyph, target_width: int) -> None:
-    _, ps_mat = _load_fontforge_modules()
+def fit_to_width(glyph, target_width: int) -> None:
+    _, ps_mat = load_fontforge_modules()
     if glyph.width > 0:
         scale = target_width / glyph.width
         glyph.transform(ps_mat.scale(scale, scale))
@@ -97,7 +64,7 @@ def output_path(config: BuildConfig, weight: str) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    fontforge_module, _ = _load_fontforge_modules()
+    fontforge_module, _ = load_fontforge_modules()
     args = parse_args(argv or sys.argv[1:])
     config = load_config(args.config)
 
@@ -123,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
         if not copy_glyph(nerd, merged, codepoint):
             continue
-        normalize_width(merged[codepoint], target_width)
+        fit_to_width(merged[codepoint], target_width)
         patched += 1
 
     merged.generate(str(output))

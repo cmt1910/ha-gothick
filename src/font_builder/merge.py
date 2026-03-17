@@ -2,17 +2,10 @@ from __future__ import annotations
 
 import argparse
 import sys
-from functools import cache
-from importlib import import_module
 from pathlib import Path
 
 from font_builder.config import BuildConfig, load_config
-
-
-@cache
-def _load_fontforge_module() -> object:
-    return import_module("fontforge")
-
+from font_builder.ff_utils import copy_glyph, load_fontforge_modules
 
 PREFERRED_BIZUD_CODEPOINTS = (0x00A5, 0x203E)
 SPACE_WIDTHS = {
@@ -26,25 +19,9 @@ SPACE_WIDTHS = {
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Merge adjusted Hack and BIZ UDGothic.")
-    parser.add_argument("--weight", required=True, choices=("Regular", "Bold"))
+    parser.add_argument("--weight", required=True)
     parser.add_argument("--config", required=True)
     return parser.parse_args(argv)
-
-
-def copy_glyph(source_font, destination_font, codepoint: int) -> bool:
-    try:
-        glyph = source_font[codepoint]
-    except (TypeError, ValueError):
-        return False
-    if glyph is None or not glyph.isWorthOutputting():
-        return False
-    source_font.selection.none()
-    destination_font.selection.none()
-    source_font.selection.select(("unicode",), codepoint)
-    source_font.copy()
-    destination_font.selection.select(("unicode",), codepoint)
-    destination_font.paste()
-    return True
 
 
 def output_path(config: BuildConfig, weight: str) -> Path:
@@ -52,7 +29,7 @@ def output_path(config: BuildConfig, weight: str) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    fontforge_module = _load_fontforge_module()
+    fontforge_module, _ = load_fontforge_modules()
     args = parse_args(argv or sys.argv[1:])
     config = load_config(args.config)
 

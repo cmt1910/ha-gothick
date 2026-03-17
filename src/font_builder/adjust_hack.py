@@ -3,23 +3,15 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Iterable
-from functools import cache
-from importlib import import_module
 from pathlib import Path
 
 from font_builder.config import BuildConfig, load_config
-
-
-@cache
-def _load_fontforge_modules() -> tuple[object, object]:
-    fontforge_module = import_module("fontforge")
-    ps_mat_module = import_module("psMat")
-    return fontforge_module, ps_mat_module
+from font_builder.ff_utils import glyph_exists, load_fontforge_modules
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Adjust Hack font metrics.")
-    parser.add_argument("--weight", required=True, choices=("Regular", "Bold"))
+    parser.add_argument("--weight", required=True)
     parser.add_argument("--config", required=True)
     return parser.parse_args(argv)
 
@@ -38,16 +30,8 @@ def iter_target_codepoints() -> Iterable[int]:
         yield from range(start, end + 1)
 
 
-def glyph_exists(font, codepoint: int) -> bool:
-    try:
-        glyph = font[codepoint]
-    except (TypeError, ValueError):
-        return False
-    return glyph is not None and glyph.isWorthOutputting()
-
-
 def center_glyph_horizontally(glyph, target_width: int) -> None:
-    _, ps_mat = _load_fontforge_modules()
+    _, ps_mat = load_fontforge_modules()
     bbox = glyph.boundingBox()
     left, _, right, _ = bbox
     outline_width = right - left
@@ -56,8 +40,8 @@ def center_glyph_horizontally(glyph, target_width: int) -> None:
     glyph.width = target_width
 
 
-def normalize_width(glyph, target_width: int) -> bool:
-    _, ps_mat = _load_fontforge_modules()
+def normalize_hack_glyph_width(glyph, target_width: int) -> bool:
+    _, ps_mat = load_fontforge_modules()
     current_width = glyph.width
     if current_width <= 0:
         glyph.width = target_width
@@ -86,7 +70,7 @@ def find_vertical_overflows(font, win_ascent: int, win_descent: int) -> list[str
 
 
 def main(argv: list[str] | None = None) -> int:
-    fontforge_module, _ = _load_fontforge_modules()
+    fontforge_module, _ = load_fontforge_modules()
     args = parse_args(argv or sys.argv[1:])
     config = load_config(args.config)
     source_path = config.hack_source_path(args.weight)
@@ -108,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
         if not glyph_exists(font, codepoint):
             continue
         glyph = font[codepoint]
-        if normalize_width(glyph, target_width):
+        if normalize_hack_glyph_width(glyph, target_width):
             changed.append(f"U+{codepoint:04X}")
 
     overflows = find_vertical_overflows(font, config.metrics.win_ascent, config.metrics.win_descent)

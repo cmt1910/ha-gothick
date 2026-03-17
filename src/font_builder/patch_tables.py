@@ -10,6 +10,11 @@ from fontTools.ttLib.tables import otTables
 
 from font_builder.common import stage_path
 from font_builder.config import BuildConfig, load_config
+from font_builder.ft_utils import collect_ligature_components, compute_x_avg_char_width
+
+_FS_SELECTION_BOLD = 1 << 5
+_FS_SELECTION_REGULAR = 1 << 6
+_FS_SELECTION_USE_TYPO_METRICS = 1 << 7
 
 
 def main() -> None:
@@ -70,15 +75,15 @@ def patch_tables(font: TTFont, config: BuildConfig, weight: str) -> None:
     os2.sxHeight = metrics.x_height
     os2.sCapHeight = metrics.cap_height
     os2.panose.bProportion = 9
-    os2.fsSelection |= 1 << 7
+    os2.fsSelection |= _FS_SELECTION_USE_TYPO_METRICS
     if weight.lower() == "bold":
         os2.usWeightClass = 700
-        os2.fsSelection |= 1 << 5
-        os2.fsSelection &= ~(1 << 6)
+        os2.fsSelection |= _FS_SELECTION_BOLD
+        os2.fsSelection &= ~_FS_SELECTION_REGULAR
     else:
         os2.usWeightClass = 400
-        os2.fsSelection &= ~(1 << 5)
-        os2.fsSelection |= 1 << 6
+        os2.fsSelection &= ~_FS_SELECTION_BOLD
+        os2.fsSelection |= _FS_SELECTION_REGULAR
 
     hhea = font["hhea"]
     hhea.ascent = metrics.win_ascent
@@ -98,7 +103,7 @@ def patch_tables(font: TTFont, config: BuildConfig, weight: str) -> None:
     post.extraNames = []
     post.mapping = {}
     _ensure_ligature_carets(font, metrics.half_width)
-    os2.xAvgCharWidth = _compute_x_avg_char_width(font)
+    os2.xAvgCharWidth = compute_x_avg_char_width(font)
 
 
 def _patch_name_table(font: TTFont, entries: dict[int, str]) -> None:
@@ -186,15 +191,8 @@ def _validate_cmap(font: TTFont) -> None:
         raise ValueError("Supplementary Unicode mappings are missing from cmap")
 
 
-def _compute_x_avg_char_width(font: TTFont) -> int:
-    widths = [width for width, _ in font["hmtx"].metrics.values() if width > 0]
-    if not widths:
-        raise ValueError("No non-zero glyph widths available for xAvgCharWidth")
-    return round(sum(widths) / len(widths))
-
-
 def _ensure_ligature_carets(font: TTFont, half_width: int) -> None:
-    ligatures = _collect_ligature_components(font)
+    ligatures = collect_ligature_components(font)
     if not ligatures:
         return
 
@@ -226,22 +224,6 @@ def _ensure_ligature_carets(font: TTFont, half_width: int) -> None:
     lig_caret_list.LigGlyph = lig_glyphs
     lig_caret_list.LigGlyphCount = len(lig_glyphs)
     gdef.LigCaretList = lig_caret_list
-
-
-def _collect_ligature_components(font: TTFont) -> dict[str, tuple[str, ...]]:
-    if "GSUB" not in font:
-        return {}
-
-    ligatures: dict[str, tuple[str, ...]] = {}
-    for lookup in font["GSUB"].table.LookupList.Lookup:
-        if lookup.LookupType != 4:
-            continue
-        for subtable in lookup.SubTable:
-            for first_component, entries in getattr(subtable, "ligatures", {}).items():
-                for ligature in entries:
-                    components = (first_component, *ligature.Component)
-                    ligatures.setdefault(ligature.LigGlyph, components)
-    return ligatures
 
 
 def _ensure_gdef_table(font: TTFont) -> otTables.GDEF:

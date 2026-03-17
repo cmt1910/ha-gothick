@@ -2,22 +2,15 @@ from __future__ import annotations
 
 import argparse
 import sys
-from contextlib import suppress
-from functools import cache
-from importlib import import_module
 from pathlib import Path
 
 from font_builder.config import BuildConfig, load_config
-
-
-@cache
-def _load_fontforge_module() -> object:
-    return import_module("fontforge")
+from font_builder.ff_utils import load_fontforge_modules
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Optimize glyph outlines.")
-    parser.add_argument("--weight", required=True, choices=("Regular", "Bold"))
+    parser.add_argument("--weight", required=True)
     parser.add_argument("--config", required=True)
     return parser.parse_args(argv)
 
@@ -27,7 +20,7 @@ def output_path(config: BuildConfig, weight: str) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    fontforge_module = _load_fontforge_module()
+    fontforge_module, _ = load_fontforge_modules()
     args = parse_args(argv or sys.argv[1:])
     config = load_config(args.config)
 
@@ -37,16 +30,23 @@ def main(argv: list[str] | None = None) -> int:
 
     font = fontforge_module.open(str(input_path))
     optimized = 0
+    warnings: list[str] = []
     for glyph in font.glyphs():
         if not glyph.isWorthOutputting():
             continue
-        with suppress(Exception):
-            glyph.correctDirection()
-        with suppress(Exception):
-            glyph.canonicalContours()
-        with suppress(Exception):
-            glyph.canonicalStart()
+        for op_name, op in (
+            ("correctDirection", glyph.correctDirection),
+            ("canonicalContours", glyph.canonicalContours),
+            ("canonicalStart", glyph.canonicalStart),
+        ):
+            try:
+                op()
+            except Exception as exc:
+                warnings.append(f"{glyph.glyphname}.{op_name}: {exc}")
         optimized += 1
+
+    for warning in warnings:
+        print(f"[optimize] warning: {warning}")
 
     font.generate(str(output))
     print(f"[optimize] input={input_path}")

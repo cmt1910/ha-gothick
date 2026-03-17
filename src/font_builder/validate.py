@@ -7,6 +7,7 @@ from fontTools.pens.boundsPen import BoundsPen
 from fontTools.ttLib import TTFont
 
 from font_builder.config import BuildConfig, load_config
+from font_builder.ft_utils import collect_ligature_components, compute_x_avg_char_width
 
 
 def main() -> None:
@@ -38,7 +39,7 @@ def validate_font(font: TTFont, config: BuildConfig) -> list[str]:
 
 def _check_metrics(font: TTFont, metrics) -> list[str]:
     errors: list[str] = []
-    expected_xavg = _compute_x_avg_char_width(font)
+    expected_xavg = compute_x_avg_char_width(font)
     checks = (
         (font["post"].isFixedPitch, 1, "post.isFixedPitch must be 1"),
         (font["post"].formatType, 2.0, "post.formatType must be 2.0"),
@@ -129,13 +130,6 @@ def _check_widths(
     return errors
 
 
-def _compute_x_avg_char_width(font: TTFont) -> int:
-    widths = [width for width, _ in font["hmtx"].metrics.values() if width > 0]
-    if not widths:
-        raise ValueError("No non-zero glyph widths available for xAvgCharWidth")
-    return round(sum(widths) / len(widths))
-
-
 def _check_typo_ascender(font: TTFont) -> list[str]:
     glyph_name = font.getBestCmap().get(0x00C0)
     if glyph_name is None:
@@ -153,7 +147,9 @@ def _check_typo_ascender(font: TTFont) -> list[str]:
 
 
 def _check_ligature_carets(font: TTFont, half_width: int) -> list[str]:
-    ligatures = _collect_ligatures(font)
+    ligatures = {
+        name: len(comps) for name, comps in collect_ligature_components(font).items()
+    }
     if not ligatures:
         return []
     if "GDEF" not in font or getattr(font["GDEF"].table, "LigCaretList", None) is None:
@@ -179,21 +175,6 @@ def _check_ligature_carets(font: TTFont, half_width: int) -> list[str]:
                 f"{glyph_name}: {actual_positions} != {expected_positions}",
             )
     return errors
-
-
-def _collect_ligatures(font: TTFont) -> dict[str, int]:
-    if "GSUB" not in font:
-        return {}
-    ligatures: dict[str, int] = {}
-    for lookup in font["GSUB"].table.LookupList.Lookup:
-        if lookup.LookupType != 4:
-            continue
-        for subtable in lookup.SubTable:
-            for entries in getattr(subtable, "ligatures", {}).values():
-                for ligature in entries:
-                    component_count = 1 + len(ligature.Component)
-                    ligatures.setdefault(ligature.LigGlyph, component_count)
-    return ligatures
 
 
 if __name__ == "__main__":

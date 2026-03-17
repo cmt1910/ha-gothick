@@ -40,8 +40,12 @@ def main() -> None:
     for weight in weights:
         build_weight(config, weight.name, skip_hinting=args.skip_hinting)
 
+    shutil.copy2(config.project_root / "LICENSE", config.dist_dir / "LICENSE.txt")
+    shutil.copy2(config.project_root / "README.md", config.dist_dir / "README.md")
+
 
 def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> None:
+    print(f"=== Building weight: {weight} ===")
     root = config.project_root
     config_arg = str(config.config_path)
     python_path = str(root / "src")
@@ -52,13 +56,7 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
         else python_path,
     }
 
-    fontforge_scripts = [
-        "adjust_hack.py",
-        "adjust_bizud.py",
-        "merge.py",
-        "patch_nerd.py",
-    ]
-    for script in fontforge_scripts:
+    def _run_fontforge(script: str) -> None:
         run_command(
             [
                 "fontforge",
@@ -73,6 +71,19 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
             env=fontforge_env,
         )
 
+    print(f"[Phase 2] Hack フォント加工 ({weight})")
+    _run_fontforge("adjust_hack.py")
+
+    print(f"[Phase 3] BIZ UDゴシック加工 ({weight})")
+    _run_fontforge("adjust_bizud.py")
+
+    print(f"[Phase 4] フォント合成 ({weight})")
+    _run_fontforge("merge.py")
+
+    print(f"[Phase 5] Nerd Fonts パッチ ({weight})")
+    _run_fontforge("patch_nerd.py")
+
+    print(f"[Phase 6] メタデータ調整 ({weight})")
     run_command(
         [
             *python_command(),
@@ -86,24 +97,15 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
         cwd=root,
     )
 
-    run_command(
-        [
-            "fontforge",
-            "-script",
-            "src/font_builder/optimize.py",
-            "--weight",
-            weight,
-            "--config",
-            config_arg,
-        ],
-        cwd=root,
-        env=fontforge_env,
-    )
+    print(f"[Phase 7.1] アウトライン最適化 ({weight})")
+    _run_fontforge("optimize.py")
 
     optimized = stage_path(config, "optimized", weight, ".ttf")
     hinted = stage_path(config, "hinted", weight, ".ttf")
     hint_stripped = stage_path(config, "hint_stripped", weight, ".ttf")
     finalized = stage_path(config, "finalized", weight, ".ttf")
+
+    print(f"[Phase 7.2] ヒンティング ({weight})")
     if skip_hinting:
         hinted.write_bytes(optimized.read_bytes())
     else:
@@ -111,6 +113,7 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
         if not result:
             hinted.write_bytes(optimized.read_bytes())
 
+    print(f"[Phase 7.25] 日本語グリフのヒンティング削除 ({weight})")
     run_command(
         [
             *python_command(),
@@ -123,6 +126,7 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
         cwd=root,
     )
 
+    print(f"[Phase 7.3] 最終メタデータ再適用 ({weight})")
     run_command(
         [
             *python_command(),
@@ -142,6 +146,7 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
 
     final_path = final_font_path(config, weight)
     shutil.copyfile(finalized, final_path)
+    print(f"=== Done: {final_path} ===")
 
 
 def _run_hinting(optimized: Path, hinted: Path, root: Path) -> bool:
@@ -155,4 +160,7 @@ def _run_hinting(optimized: Path, hinted: Path, root: Path) -> bool:
         str(hinted),
     ]
     completed = subprocess.run(command, cwd=str(root), check=False)
+    if completed.returncode != 0:
+        rc = completed.returncode
+        print(f"[build] warning: ttfautohint failed (exit {rc}), using unhinted font")
     return completed.returncode == 0
