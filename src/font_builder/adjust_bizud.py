@@ -95,6 +95,7 @@ def aggregate_bbox(font, codepoints: Iterable[int]) -> tuple[float, float, float
 def compute_y_offset(font, config: BuildConfig, visual_scale: float) -> int:
     override = config.metrics.y_offset
     if override is not None:
+        # Prefer an explicit offset when preserving the Japanese body's native balance.
         return int(override)
     bbox = aggregate_bbox(font, range(0x3040, 0x30FF + 1))
     if bbox is None:
@@ -162,6 +163,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[adjust_bizud] source={source_path}")
     print(f"[adjust_bizud] output={output}")
     print(f"[adjust_bizud] y_offset={y_offset}")
+    if config.metrics.y_offset is not None:
+        print("[adjust_bizud] y_offset_source=config")
+    else:
+        print("[adjust_bizud] y_offset_source=auto")
     print(f"[adjust_bizud] visual_scale={visual_scale}")
     print(f"[adjust_bizud] full_width_adjusted={adjusted_full}")
     print(f"[adjust_bizud] half_width_adjusted={adjusted_half}")
