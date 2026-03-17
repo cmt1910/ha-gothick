@@ -6,7 +6,6 @@ from pathlib import Path
 from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables.ttProgram import Program
 
-
 JAPANESE_RANGES: tuple[tuple[int, int], ...] = (
     (0x3000, 0x303F),  # CJK Symbols and Punctuation
     (0x3040, 0x309F),  # Hiragana
@@ -57,9 +56,7 @@ def strip_japanese_hinting(font: TTFont) -> None:
 def _collect_target_glyphs(font: TTFont) -> set[str]:
     cmap = font.getBestCmap() or {}
     initial = {
-        glyph_name
-        for codepoint, glyph_name in cmap.items()
-        if _is_japanese_codepoint(codepoint)
+        glyph_name for codepoint, glyph_name in cmap.items() if _is_japanese_codepoint(codepoint)
     }
     return _expand_components(font, initial)
 

@@ -1,22 +1,18 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
+from contextlib import suppress
+from functools import cache
+from importlib import import_module
+from pathlib import Path
 
 from font_builder.config import BuildConfig, load_config
 
-fontforge = None
 
-
+@cache
 def _load_fontforge_module() -> object:
-    global fontforge
-    if fontforge is None:
-        import fontforge as fontforge_module  # type: ignore
-
-        fontforge = fontforge_module
-    return fontforge
+    return import_module("fontforge")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -39,45 +35,17 @@ def main(argv: list[str] | None = None) -> int:
     output = output_path(config, args.weight)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    # 字形を変化させる恐れがある処理はコメントアウト
     font = fontforge_module.open(str(input_path))
     optimized = 0
     for glyph in font.glyphs():
         if not glyph.isWorthOutputting():
             continue
-        # try:
-        #     glyph.removeOverlap()
-        # except Exception:
-        #     pass
-        try:
+        with suppress(Exception):
             glyph.correctDirection()
-        except Exception:
-            pass
-        try:
+        with suppress(Exception):
             glyph.canonicalContours()
-        except Exception:
-            pass
-        try:
+        with suppress(Exception):
             glyph.canonicalStart()
-        except Exception:
-            pass
-        # try:
-        #     glyph.addExtrema("all")
-        # except Exception:
-        #     pass
-        # try:
-        #     glyph.round()
-        # except Exception:
-        #     pass
-        # try:
-        #     glyph.simplify(0.1)
-        # except TypeError:
-        #     try:
-        #         glyph.simplify()
-        #     except Exception:
-        #         pass
-        # except Exception:
-        #     pass
         optimized += 1
 
     font.generate(str(output))

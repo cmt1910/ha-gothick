@@ -1,26 +1,20 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
-from typing import Iterable
+from collections.abc import Iterable
+from functools import cache
+from importlib import import_module
+from pathlib import Path
 
 from font_builder.config import BuildConfig, load_config
 
-fontforge = None
-psMat = None
 
-
+@cache
 def _load_fontforge_modules() -> tuple[object, object]:
-    global fontforge, psMat
-    if fontforge is None or psMat is None:
-        import fontforge as fontforge_module  # type: ignore
-        import psMat as ps_mat_module  # type: ignore
-
-        fontforge = fontforge_module
-        psMat = ps_mat_module
-    return fontforge, psMat
+    fontforge_module = import_module("fontforge")
+    ps_mat_module = import_module("psMat")
+    return fontforge_module, ps_mat_module
 
 
 KEEP_LATIN_CODEPOINTS = {0x00A5, 0x203E}
@@ -87,13 +81,12 @@ def fit_glyph(glyph, target_width: int, y_offset: float, visual_scale: float) ->
 
 
 def aggregate_bbox(font, codepoints: Iterable[int]) -> tuple[float, float, float, float] | None:
-    boxes: list[tuple[float, float, float, float]] = []
-    for codepoint in codepoints:
-        if glyph_exists(font, codepoint):
-            boxes.append(font[codepoint].boundingBox())
+    boxes = [
+        font[codepoint].boundingBox() for codepoint in codepoints if glyph_exists(font, codepoint)
+    ]
     if not boxes:
         return None
-    xs0, ys0, xs1, ys1 = zip(*boxes)
+    xs0, ys0, xs1, ys1 = zip(*boxes, strict=False)
     return min(xs0), min(ys0), max(xs1), max(ys1)
 
 
@@ -112,12 +105,13 @@ def compute_y_offset(font, config: BuildConfig, visual_scale: float) -> int:
 
 
 def scale_upm(font, target_upm: int) -> None:
+    _, ps_mat = _load_fontforge_modules()
     current_upm = int(font.em)
     if current_upm == target_upm:
         return
     scale = target_upm / current_upm
     font.selection.all()
-    font.transform(psMat.scale(scale, scale))
+    font.transform(ps_mat.scale(scale, scale))
     font.selection.none()
     font.em = target_upm
 

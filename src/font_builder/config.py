@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
-from pathlib import Path
 import shutil
 import subprocess
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 try:
@@ -123,7 +123,7 @@ def load_config(config_path: str | Path) -> BuildConfig:
     full_width = int(metrics_raw["full_width"])
     if full_width != half_width * 2:
         raise ConfigError(
-            f"metrics.full_width must be exactly 2x half_width: {full_width} != {half_width * 2}"
+            f"metrics.full_width must be exactly 2x half_width: {full_width} != {half_width * 2}",
         )
 
     project_root = path.parent.parent.resolve()
@@ -143,7 +143,7 @@ def load_config(config_path: str | Path) -> BuildConfig:
                 name=str(item["name"]),
                 hack=str(item["hack"]),
                 bizud=str(item["bizud"]),
-            )
+            ),
         )
 
     sources = {
@@ -182,9 +182,7 @@ def load_config(config_path: str | Path) -> BuildConfig:
             cap_height=int(metrics_raw["cap_height"]),
             is_fixed_pitch=bool(metrics_raw["is_fixed_pitch"]),
             y_offset=(
-                int(metrics_raw["y_offset"])
-                if metrics_raw.get("y_offset") is not None
-                else None
+                int(metrics_raw["y_offset"]) if metrics_raw.get("y_offset") is not None else None
             ),
             bizud_visual_scale=float(metrics_raw.get("bizud_visual_scale", 1.0)),
         ),

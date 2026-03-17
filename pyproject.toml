@@ -39,3 +39,19 @@ exclude = [
     "build",
     "dist",
 ]
+
+[tool.ruff.lint]
+# チェックするエラーの種類
+select = ["ALL"]
+ignore = [
+    "ANN",
+    "D",
+    "EM101",
+    "EM102",
+    "PLR2004",
+    "S603",
+    "TC003",
+    "T201",
+    "TRY003",
+    "COM812",
+]

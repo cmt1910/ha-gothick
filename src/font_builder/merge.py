@@ -1,22 +1,17 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
+from functools import cache
+from importlib import import_module
+from pathlib import Path
 
 from font_builder.config import BuildConfig, load_config
 
-fontforge = None
 
-
+@cache
 def _load_fontforge_module() -> object:
-    global fontforge
-    if fontforge is None:
-        import fontforge as fontforge_module  # type: ignore
-
-        fontforge = fontforge_module
-    return fontforge
+    return import_module("fontforge")
 
 
 PREFERRED_BIZUD_CODEPOINTS = (0x00A5, 0x203E)

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import re
+from pathlib import Path
 
 from fontTools import subset
 from fontTools.ttLib import TTFont, newTable
@@ -21,8 +21,12 @@ def main() -> None:
     args = parser.parse_args()
 
     config = load_config(args.config)
-    input_path = Path(args.input) if args.input else stage_path(config, "nerd_patched", args.weight, ".ttf")
-    output_path = Path(args.output) if args.output else stage_path(config, "patched", args.weight, ".ttf")
+    input_path = (
+        Path(args.input) if args.input else stage_path(config, "nerd_patched", args.weight, ".ttf")
+    )
+    output_path = (
+        Path(args.output) if args.output else stage_path(config, "patched", args.weight, ".ttf")
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     font = TTFont(str(input_path))
@@ -39,7 +43,23 @@ def patch_tables(font: TTFont, config: BuildConfig, weight: str) -> None:
     postscript_name = f"{family.replace(' ', '-')}-{subfamily}"
     opentype_version = _format_opentype_version(config.font.version)
 
-    _patch_name_table(font, config, subfamily, full_name, postscript_name, opentype_version)
+    _patch_name_table(
+        font,
+        {
+            0: config.font.copyright,
+            1: family,
+            2: subfamily,
+            4: full_name,
+            5: f"Version {opentype_version}",
+            6: postscript_name,
+            8: family,
+            9: config.font.vendor_url,
+            11: config.font.vendor_url,
+            12: config.font.vendor_url,
+            13: config.font.license,
+            14: config.font.license_url,
+        },
+    )
 
     os2 = font["OS/2"]
     os2.sTypoAscender = metrics.typo_ascender
@@ -81,14 +101,7 @@ def patch_tables(font: TTFont, config: BuildConfig, weight: str) -> None:
     os2.xAvgCharWidth = _compute_x_avg_char_width(font)
 
 
-def _patch_name_table(
-    font: TTFont,
-    config: BuildConfig,
-    subfamily: str,
-    full_name: str,
-    postscript_name: str,
-    opentype_version: str,
-) -> None:
+def _patch_name_table(font: TTFont, entries: dict[int, str]) -> None:
     name_table = font["name"]
     target_ids = {0, 1, 2, 4, 5, 6, 8, 9, 11, 12, 13, 14}
     name_table.names = [
@@ -97,20 +110,6 @@ def _patch_name_table(
         if record.platformID != 1 and record.nameID not in target_ids
     ]
 
-    entries = {
-        0: config.font.copyright,
-        1: config.font.family_name,
-        2: subfamily,
-        4: full_name,
-        5: f"Version {opentype_version}",
-        6: postscript_name,
-        8: config.font.family_name,
-        9: config.font.vendor_url,
-        11: config.font.vendor_url,
-        12: config.font.vendor_url,
-        13: config.font.license,
-        14: config.font.license_url,
-    }
     for name_id, value in entries.items():
         name_table.setName(value, name_id, 3, 1, 0x0409)
 
@@ -163,7 +162,9 @@ def _case_counterparts(codepoint: int) -> set[int]:
         _single_codepoint(char.title()),
         _single_codepoint(char.casefold()),
     }
-    return {candidate for candidate in candidates if candidate is not None and candidate != codepoint}
+    return {
+        candidate for candidate in candidates if candidate is not None and candidate != codepoint
+    }
 
 
 def _single_codepoint(text: str) -> int | None:
@@ -189,7 +190,7 @@ def _compute_x_avg_char_width(font: TTFont) -> int:
     widths = [width for width, _ in font["hmtx"].metrics.values() if width > 0]
     if not widths:
         raise ValueError("No non-zero glyph widths available for xAvgCharWidth")
-    return int(round(sum(widths) / len(widths)))
+    return round(sum(widths) / len(widths))
 
 
 def _ensure_ligature_carets(font: TTFont, half_width: int) -> None:

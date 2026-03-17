@@ -5,8 +5,8 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from .config import BuildConfig, load_config
 

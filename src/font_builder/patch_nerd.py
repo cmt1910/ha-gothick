@@ -1,25 +1,19 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
+from functools import cache
+from importlib import import_module
+from pathlib import Path
 
 from font_builder.config import BuildConfig, load_config
 
-fontforge = None
-psMat = None
 
-
+@cache
 def _load_fontforge_modules() -> tuple[object, object]:
-    global fontforge, psMat
-    if fontforge is None or psMat is None:
-        import fontforge as fontforge_module  # type: ignore
-        import psMat as ps_mat_module  # type: ignore
-
-        fontforge = fontforge_module
-        psMat = ps_mat_module
-    return fontforge, psMat
+    fontforge_module = import_module("fontforge")
+    ps_mat_module = import_module("psMat")
+    return fontforge_module, ps_mat_module
 
 
 NERD_SET_RANGES = {

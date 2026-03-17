@@ -1,26 +1,20 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
-from typing import Iterable
+from collections.abc import Iterable
+from functools import cache
+from importlib import import_module
+from pathlib import Path
 
 from font_builder.config import BuildConfig, load_config
 
-fontforge = None
-psMat = None
 
-
+@cache
 def _load_fontforge_modules() -> tuple[object, object]:
-    global fontforge, psMat
-    if fontforge is None or psMat is None:
-        import fontforge as fontforge_module  # type: ignore
-        import psMat as ps_mat_module  # type: ignore
-
-        fontforge = fontforge_module
-        psMat = ps_mat_module
-    return fontforge, psMat
+    fontforge_module = import_module("fontforge")
+    ps_mat_module = import_module("psMat")
+    return fontforge_module, ps_mat_module
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -106,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     font = fontforge_module.open(str(source_path))
     if int(font.em) != expected_upm:
         raise SystemExit(
-            f"Hack UPM mismatch: expected {expected_upm}, got {font.em} ({source_path})"
+            f"Hack UPM mismatch: expected {expected_upm}, got {font.em} ({source_path})",
         )
 
     changed: list[str] = []
@@ -117,9 +111,7 @@ def main(argv: list[str] | None = None) -> int:
         if normalize_width(glyph, target_width):
             changed.append(f"U+{codepoint:04X}")
 
-    overflows = find_vertical_overflows(
-        font, config.metrics.win_ascent, config.metrics.win_descent
-    )
+    overflows = find_vertical_overflows(font, config.metrics.win_ascent, config.metrics.win_descent)
 
     font.save(str(output))
     print(f"[adjust_hack] source={source_path}")

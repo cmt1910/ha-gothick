@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import argparse
 import os
-from pathlib import Path
 import shutil
+import subprocess
+from pathlib import Path
 
-from .common import check_commands, ensure_directories, final_font_path, python_command, run_command, stage_path
+from .common import (
+    check_commands,
+    ensure_directories,
+    final_font_path,
+    python_command,
+    run_command,
+    stage_path,
+)
 from .config import BuildConfig, load_config
 
 
@@ -39,7 +47,9 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
     python_path = str(root / "src")
     current_python_path = os.environ.get("PYTHONPATH")
     fontforge_env = {
-        "PYTHONPATH": f"{python_path}:{current_python_path}" if current_python_path else python_path,
+        "PYTHONPATH": f"{python_path}:{current_python_path}"
+        if current_python_path
+        else python_path,
     }
 
     fontforge_scripts = [
@@ -50,18 +60,42 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
     ]
     for script in fontforge_scripts:
         run_command(
-            ["fontforge", "-script", f"src/font_builder/{script}", "--weight", weight, "--config", config_arg],
+            [
+                "fontforge",
+                "-script",
+                f"src/font_builder/{script}",
+                "--weight",
+                weight,
+                "--config",
+                config_arg,
+            ],
             cwd=root,
             env=fontforge_env,
         )
 
     run_command(
-        [*python_command(), "-m", "font_builder.patch_tables", "--weight", weight, "--config", config_arg],
+        [
+            *python_command(),
+            "-m",
+            "font_builder.patch_tables",
+            "--weight",
+            weight,
+            "--config",
+            config_arg,
+        ],
         cwd=root,
     )
 
     run_command(
-        ["fontforge", "-script", "src/font_builder/optimize.py", "--weight", weight, "--config", config_arg],
+        [
+            "fontforge",
+            "-script",
+            "src/font_builder/optimize.py",
+            "--weight",
+            weight,
+            "--config",
+            config_arg,
+        ],
         cwd=root,
         env=fontforge_env,
     )
@@ -111,8 +145,6 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
 
 
 def _run_hinting(optimized: Path, hinted: Path, root: Path) -> bool:
-    import subprocess
-
     command = [
         "ttfautohint",
         "--stem-width-mode=nnn",

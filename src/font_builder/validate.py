@@ -26,59 +26,86 @@ def main() -> None:
 
 
 def validate_font(font: TTFont, config: BuildConfig) -> list[str]:
-    errors: list[str] = []
     metrics = config.metrics
     cmap = font.getBestCmap()
-    glyph_set = font.getGlyphSet()
+    errors = _check_metrics(font, metrics)
+    errors.extend(_check_required_mappings(font, cmap))
+    errors.extend(_check_typo_ascender(font))
+    errors.extend(_check_ligature_carets(font, metrics.half_width))
+    errors.extend(_check_sample_width_sets(font, cmap, metrics))
+    return errors
 
-    if font["post"].isFixedPitch != 1:
-        errors.append("post.isFixedPitch must be 1")
-    if font["post"].formatType != 2.0:
-        errors.append("post.formatType must be 2.0")
-    if font["OS/2"].panose.bProportion != 9:
-        errors.append("OS/2.panose.bProportion must be 9")
+
+def _check_metrics(font: TTFont, metrics) -> list[str]:
+    errors: list[str] = []
     expected_xavg = _compute_x_avg_char_width(font)
-    if font["OS/2"].xAvgCharWidth != expected_xavg:
-        errors.append(f"OS/2.xAvgCharWidth must be {expected_xavg}")
-    if font["head"].unitsPerEm != metrics.upm:
-        errors.append(f"head.unitsPerEm must be {metrics.upm}")
-    if font["OS/2"].sTypoAscender != metrics.typo_ascender:
-        errors.append(f"OS/2.sTypoAscender must be {metrics.typo_ascender}")
-    if font["OS/2"].sTypoDescender != metrics.typo_descender:
-        errors.append(f"OS/2.sTypoDescender must be {metrics.typo_descender}")
-    if font["OS/2"].sTypoLineGap != 0:
-        errors.append("OS/2.sTypoLineGap must be 0")
-    if font["hhea"].ascent != metrics.win_ascent:
-        errors.append(f"hhea.ascent must be {metrics.win_ascent}")
-    if font["hhea"].descent != -metrics.win_descent:
-        errors.append(f"hhea.descent must be {-metrics.win_descent}")
-    if font["hhea"].lineGap != 0:
-        errors.append("hhea.lineGap must be 0")
-    if 0xE0A0 not in cmap:
-        errors.append("Powerline glyph U+E0A0 is missing")
-    if 0xE000 in cmap:
-        errors.append("Pomicons glyph U+E000 must not be present")
-    if 0x00AD in cmap:
-        errors.append("Soft Hyphen U+00AD must not be present")
+    checks = (
+        (font["post"].isFixedPitch, 1, "post.isFixedPitch must be 1"),
+        (font["post"].formatType, 2.0, "post.formatType must be 2.0"),
+        (font["OS/2"].panose.bProportion, 9, "OS/2.panose.bProportion must be 9"),
+        (font["OS/2"].xAvgCharWidth, expected_xavg, f"OS/2.xAvgCharWidth must be {expected_xavg}"),
+        (font["head"].unitsPerEm, metrics.upm, f"head.unitsPerEm must be {metrics.upm}"),
+        (
+            font["OS/2"].sTypoAscender,
+            metrics.typo_ascender,
+            f"OS/2.sTypoAscender must be {metrics.typo_ascender}",
+        ),
+        (
+            font["OS/2"].sTypoDescender,
+            metrics.typo_descender,
+            f"OS/2.sTypoDescender must be {metrics.typo_descender}",
+        ),
+        (font["OS/2"].sTypoLineGap, 0, "OS/2.sTypoLineGap must be 0"),
+        (font["hhea"].ascent, metrics.win_ascent, f"hhea.ascent must be {metrics.win_ascent}"),
+        (
+            font["hhea"].descent,
+            -metrics.win_descent,
+            f"hhea.descent must be {-metrics.win_descent}",
+        ),
+        (font["hhea"].lineGap, 0, "hhea.lineGap must be 0"),
+    )
+    for actual, expected, message in checks:
+        if actual != expected:
+            errors.append(message)
+    return errors
+
+
+def _check_required_mappings(font: TTFont, cmap: dict[int, str]) -> list[str]:
+    errors: list[str] = []
+    presence_checks = (
+        (0xE0A0, True, "Powerline glyph U+E0A0 is missing"),
+        (0xE000, False, "Pomicons glyph U+E000 must not be present"),
+        (0x00AD, False, "Soft Hyphen U+00AD must not be present"),
+    )
+    for codepoint, should_exist, message in presence_checks:
+        exists = codepoint in cmap
+        if exists != should_exist:
+            errors.append(message)
+
     formats = {table.format for table in font["cmap"].tables}
     if 4 not in formats:
         errors.append("cmap format 4 is missing")
     if 12 not in formats:
         errors.append("cmap format 12 is missing")
-    errors.extend(_check_typo_ascender(font))
-    errors.extend(_check_ligature_carets(font, metrics.half_width))
+    return errors
 
-    errors.extend(_check_widths(font, glyph_set, cmap, range(0x20, 0x7F), metrics.half_width, "ASCII"))
-    errors.extend(_check_widths(font, glyph_set, cmap, range(0x3041, 0x3097), metrics.full_width, "Hiragana"))
-    errors.extend(_check_widths(font, glyph_set, cmap, range(0x30A1, 0x30FB), metrics.full_width, "Katakana"))
-    errors.extend(_check_widths(font, glyph_set, cmap, range(0x4E00, 0x4E50), metrics.full_width, "CJK sample"))
-    errors.extend(_check_widths(font, glyph_set, cmap, range(0xE0A0, 0xE0D5), metrics.half_width, "Powerline"))
+
+def _check_sample_width_sets(font: TTFont, cmap: dict[int, str], metrics) -> list[str]:
+    errors: list[str] = []
+    width_sets = (
+        ("ASCII", range(0x20, 0x7F), metrics.half_width),
+        ("Hiragana", range(0x3041, 0x3097), metrics.full_width),
+        ("Katakana", range(0x30A1, 0x30FB), metrics.full_width),
+        ("CJK sample", range(0x4E00, 0x4E50), metrics.full_width),
+        ("Powerline", range(0xE0A0, 0xE0D5), metrics.half_width),
+    )
+    for label, codepoints, expected_width in width_sets:
+        errors.extend(_check_widths(font, cmap, codepoints, expected_width, label))
     return errors
 
 
 def _check_widths(
     font: TTFont,
-    glyph_set,
     cmap: dict[int, str],
     codepoints: range,
     expected_width: int,
@@ -94,7 +121,9 @@ def _check_widths(
         present += 1
         width, _ = hmtx[glyph_name]
         if width != expected_width:
-            errors.append(f"{label} width mismatch for U+{codepoint:04X}: {width} != {expected_width}")
+            errors.append(
+                f"{label} width mismatch for U+{codepoint:04X}: {width} != {expected_width}",
+            )
     if present == 0:
         errors.append(f"{label} glyphs are missing")
     return errors
@@ -104,7 +133,7 @@ def _compute_x_avg_char_width(font: TTFont) -> int:
     widths = [width for width, _ in font["hmtx"].metrics.values() if width > 0]
     if not widths:
         raise ValueError("No non-zero glyph widths available for xAvgCharWidth")
-    return int(round(sum(widths) / len(widths)))
+    return round(sum(widths) / len(widths))
 
 
 def _check_typo_ascender(font: TTFont) -> list[str]:
@@ -145,7 +174,10 @@ def _check_ligature_carets(font: TTFont, half_width: int) -> list[str]:
         expected_positions = [half_width * index for index in range(1, component_count)]
         actual_positions = [caret.Coordinate for caret in lig_glyph.CaretValue]
         if actual_positions != expected_positions:
-            errors.append(f"Ligature caret positions mismatch for {glyph_name}: {actual_positions} != {expected_positions}")
+            errors.append(
+                "Ligature caret positions mismatch for "
+                f"{glyph_name}: {actual_positions} != {expected_positions}",
+            )
     return errors
 
 
@@ -157,7 +189,7 @@ def _collect_ligatures(font: TTFont) -> dict[str, int]:
         if lookup.LookupType != 4:
             continue
         for subtable in lookup.SubTable:
-            for first_component, entries in getattr(subtable, "ligatures", {}).items():
+            for entries in getattr(subtable, "ligatures", {}).values():
                 for ligature in entries:
                     component_count = 1 + len(ligature.Component)
                     ligatures.setdefault(ligature.LigGlyph, component_count)
