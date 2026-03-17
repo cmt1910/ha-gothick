@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -40,8 +41,11 @@ def check_commands(commands: Iterable[str]) -> list[str]:
     return [command for command in commands if shutil.which(command) is None]
 
 
-def run_command(command: list[str], cwd: Path) -> None:
-    completed = subprocess.run(command, cwd=str(cwd), check=False)
+def run_command(command: list[str], cwd: Path, env: dict[str, str] | None = None) -> None:
+    merged_env = os.environ.copy()
+    if env is not None:
+        merged_env.update(env)
+    completed = subprocess.run(command, cwd=str(cwd), check=False, env=merged_env)
     if completed.returncode != 0:
         raise SystemExit(completed.returncode)
 

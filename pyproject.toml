@@ -39,13 +39,3 @@ exclude = [
     "build",
     "dist",
 ]
-
-[tool.ruff.lint.per-file-ignores]
-"main.py" = ["E402"]
-"src/font_builder/adjust_bizud.py" = ["E402"]
-"src/font_builder/adjust_hack.py" = ["E402"]
-"src/font_builder/merge.py" = ["E402"]
-"src/font_builder/optimize.py" = ["E402"]
-"src/font_builder/patch_nerd.py" = ["E402"]
-"src/font_builder/patch_tables.py" = ["E402"]
-"src/font_builder/validate.py" = ["E402"]

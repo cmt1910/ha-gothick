@@ -5,17 +5,18 @@ import argparse
 from pathlib import Path
 import sys
 
-ROOT = Path(__file__).resolve().parents[2]
-SRC_DIR = ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-try:
-    import fontforge  # type: ignore
-except ImportError:
-    raise
-
 from font_builder.config import BuildConfig, load_config
+
+fontforge = None
+
+
+def _load_fontforge_module() -> object:
+    global fontforge
+    if fontforge is None:
+        import fontforge as fontforge_module  # type: ignore
+
+        fontforge = fontforge_module
+    return fontforge
 
 
 PREFERRED_BIZUD_CODEPOINTS = (0x00A5, 0x203E)
@@ -56,6 +57,7 @@ def output_path(config: BuildConfig, weight: str) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
+    fontforge_module = _load_fontforge_module()
     args = parse_args(argv or sys.argv[1:])
     config = load_config(args.config)
 
@@ -66,8 +68,8 @@ def main(argv: list[str] | None = None) -> int:
     output = output_path(config, args.weight)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    base = fontforge.open(str(hack_path))
-    bizud = fontforge.open(str(bizud_path))
+    base = fontforge_module.open(str(hack_path))
+    bizud = fontforge_module.open(str(bizud_path))
 
     base.mergeFonts(str(bizud_path))
 

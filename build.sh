@@ -7,6 +7,7 @@ DOCKER_IMAGE="${DOCKER_IMAGE:-ha-gothick-build:latest}"
 DOCKER_PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
 WEIGHTS=("Regular" "Bold")
 PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
+PYTHONPATH_PREFIX="${SCRIPT_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
 log()  { printf "\033[1;34m[INFO]\033[0m  %s\n" "$*"; }
 warn() { printf "\033[1;33m[WARN]\033[0m  %s\n" "$*"; }
@@ -106,22 +107,22 @@ build_weight() {
     log "=== Building weight: ${weight} ==="
 
     log "[Phase 2] Hack フォント加工 (${weight})"
-    fontforge -script src/font_builder/adjust_hack.py --weight "${weight}" --config "${CONFIG}"
+    PYTHONPATH="${PYTHONPATH_PREFIX}" fontforge -script src/font_builder/adjust_hack.py --weight "${weight}" --config "${CONFIG}"
 
     log "[Phase 3] BIZ UDゴシック加工 (${weight})"
-    fontforge -script src/font_builder/adjust_bizud.py --weight "${weight}" --config "${CONFIG}"
+    PYTHONPATH="${PYTHONPATH_PREFIX}" fontforge -script src/font_builder/adjust_bizud.py --weight "${weight}" --config "${CONFIG}"
 
     log "[Phase 4] フォント合成 (${weight})"
-    fontforge -script src/font_builder/merge.py --weight "${weight}" --config "${CONFIG}"
+    PYTHONPATH="${PYTHONPATH_PREFIX}" fontforge -script src/font_builder/merge.py --weight "${weight}" --config "${CONFIG}"
 
     log "[Phase 5] Nerd Fonts パッチ (${weight})"
-    fontforge -script src/font_builder/patch_nerd.py --weight "${weight}" --config "${CONFIG}"
+    PYTHONPATH="${PYTHONPATH_PREFIX}" fontforge -script src/font_builder/patch_nerd.py --weight "${weight}" --config "${CONFIG}"
 
     log "[Phase 6] メタデータ調整 (${weight})"
-    uv run python src/font_builder/patch_tables.py --weight "${weight}" --config "${CONFIG}"
+    uv run python -m font_builder.patch_tables --weight "${weight}" --config "${CONFIG}"
 
     log "[Phase 7.1] アウトライン最適化 (${weight})"
-    fontforge -script src/font_builder/optimize.py --weight "${weight}" --config "${CONFIG}"
+    PYTHONPATH="${PYTHONPATH_PREFIX}" fontforge -script src/font_builder/optimize.py --weight "${weight}" --config "${CONFIG}"
 
     log "[Phase 7.2] ヒンティング (${weight})"
     if ttfautohint \
@@ -143,7 +144,7 @@ build_weight() {
 
     mkdir -p dist
     log "[Phase 7.3] 最終メタデータ再適用 (${weight})"
-    uv run python src/font_builder/patch_tables.py \
+    uv run python -m font_builder.patch_tables \
         --weight "${weight}" \
         --config "${CONFIG}" \
         --input "${hint_stripped}" \

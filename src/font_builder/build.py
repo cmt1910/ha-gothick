@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import shutil
 
@@ -35,6 +36,11 @@ def main() -> None:
 def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> None:
     root = config.project_root
     config_arg = str(config.config_path)
+    python_path = str(root / "src")
+    current_python_path = os.environ.get("PYTHONPATH")
+    fontforge_env = {
+        "PYTHONPATH": f"{python_path}:{current_python_path}" if current_python_path else python_path,
+    }
 
     fontforge_scripts = [
         "adjust_hack.py",
@@ -46,16 +52,18 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
         run_command(
             ["fontforge", "-script", f"src/font_builder/{script}", "--weight", weight, "--config", config_arg],
             cwd=root,
+            env=fontforge_env,
         )
 
     run_command(
-        [*python_command(), "src/font_builder/patch_tables.py", "--weight", weight, "--config", config_arg],
+        [*python_command(), "-m", "font_builder.patch_tables", "--weight", weight, "--config", config_arg],
         cwd=root,
     )
 
     run_command(
         ["fontforge", "-script", "src/font_builder/optimize.py", "--weight", weight, "--config", config_arg],
         cwd=root,
+        env=fontforge_env,
     )
 
     optimized = stage_path(config, "optimized", weight, ".ttf")
@@ -84,7 +92,8 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
     run_command(
         [
             *python_command(),
-            "src/font_builder/patch_tables.py",
+            "-m",
+            "font_builder.patch_tables",
             "--weight",
             weight,
             "--config",

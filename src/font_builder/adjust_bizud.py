@@ -6,18 +6,21 @@ from pathlib import Path
 import sys
 from typing import Iterable
 
-ROOT = Path(__file__).resolve().parents[2]
-SRC_DIR = ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-try:
-    import fontforge  # type: ignore
-    import psMat  # type: ignore
-except ImportError:
-    raise
-
 from font_builder.config import BuildConfig, load_config
+
+fontforge = None
+psMat = None
+
+
+def _load_fontforge_modules() -> tuple[object, object]:
+    global fontforge, psMat
+    if fontforge is None or psMat is None:
+        import fontforge as fontforge_module  # type: ignore
+        import psMat as ps_mat_module  # type: ignore
+
+        fontforge = fontforge_module
+        psMat = ps_mat_module
+    return fontforge, psMat
 
 
 KEEP_LATIN_CODEPOINTS = {0x00A5, 0x203E}
@@ -65,19 +68,21 @@ def glyph_exists(font, codepoint: int) -> bool:
 
 
 def translate_and_width(glyph, target_width: int, y_offset: float) -> None:
+    _, ps_mat = _load_fontforge_modules()
     bbox = glyph.boundingBox()
     left, _, right, _ = bbox
     outline_width = right - left
     offset_x = (target_width - outline_width) / 2.0 - left
-    glyph.transform(psMat.translate(offset_x, y_offset))
+    glyph.transform(ps_mat.translate(offset_x, y_offset))
     glyph.width = target_width
 
 
 def fit_glyph(glyph, target_width: int, y_offset: float, visual_scale: float) -> None:
+    _, ps_mat = _load_fontforge_modules()
     current_width = glyph.width
     if current_width > 0:
         scale = (target_width / current_width) * visual_scale
-        glyph.transform(psMat.scale(scale, scale))
+        glyph.transform(ps_mat.scale(scale, scale))
     translate_and_width(glyph, target_width, y_offset)
 
 
@@ -125,6 +130,7 @@ def clear_glyph(font, codepoint: int) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
+    fontforge_module, _ = _load_fontforge_modules()
     args = parse_args(argv or sys.argv[1:])
     config = load_config(args.config)
     target_upm = config.metrics.upm
@@ -135,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     output = output_path(config, args.weight)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    font = fontforge.open(str(source_path))
+    font = fontforge_module.open(str(source_path))
     scale_upm(font, target_upm)
     y_offset = compute_y_offset(font, config, visual_scale)
 

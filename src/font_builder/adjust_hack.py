@@ -6,18 +6,21 @@ from pathlib import Path
 import sys
 from typing import Iterable
 
-ROOT = Path(__file__).resolve().parents[2]
-SRC_DIR = ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-try:
-    import fontforge  # type: ignore
-    import psMat  # type: ignore
-except ImportError:
-    raise
-
 from font_builder.config import BuildConfig, load_config
+
+fontforge = None
+psMat = None
+
+
+def _load_fontforge_modules() -> tuple[object, object]:
+    global fontforge, psMat
+    if fontforge is None or psMat is None:
+        import fontforge as fontforge_module  # type: ignore
+        import psMat as ps_mat_module  # type: ignore
+
+        fontforge = fontforge_module
+        psMat = ps_mat_module
+    return fontforge, psMat
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -50,15 +53,17 @@ def glyph_exists(font, codepoint: int) -> bool:
 
 
 def center_glyph_horizontally(glyph, target_width: int) -> None:
+    _, ps_mat = _load_fontforge_modules()
     bbox = glyph.boundingBox()
     left, _, right, _ = bbox
     outline_width = right - left
     offset = (target_width - outline_width) / 2.0 - left
-    glyph.transform(psMat.translate(offset, 0))
+    glyph.transform(ps_mat.translate(offset, 0))
     glyph.width = target_width
 
 
 def normalize_width(glyph, target_width: int) -> bool:
+    _, ps_mat = _load_fontforge_modules()
     current_width = glyph.width
     if current_width <= 0:
         glyph.width = target_width
@@ -66,7 +71,7 @@ def normalize_width(glyph, target_width: int) -> bool:
     if current_width == target_width:
         return False
     scale = target_width / current_width
-    glyph.transform(psMat.scale(scale, scale))
+    glyph.transform(ps_mat.scale(scale, scale))
     center_glyph_horizontally(glyph, target_width)
     return True
 
@@ -87,6 +92,7 @@ def find_vertical_overflows(font, win_ascent: int, win_descent: int) -> list[str
 
 
 def main(argv: list[str] | None = None) -> int:
+    fontforge_module, _ = _load_fontforge_modules()
     args = parse_args(argv or sys.argv[1:])
     config = load_config(args.config)
     source_path = config.hack_source_path(args.weight)
@@ -97,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     output = output_path(config, args.weight)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    font = fontforge.open(str(source_path))
+    font = fontforge_module.open(str(source_path))
     if int(font.em) != expected_upm:
         raise SystemExit(
             f"Hack UPM mismatch: expected {expected_upm}, got {font.em} ({source_path})"

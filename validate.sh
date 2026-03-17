@@ -30,7 +30,7 @@ EXIT_CODE=0
 
 for ttf in "${fonts[@]}"; do
     log "検証中: $(basename "${ttf}")"
-    if ! uv run python src/font_builder/validate.py "${ttf}"; then
+    if ! uv run python -m font_builder.validate "${ttf}"; then
         EXIT_CODE=1
     fi
 done

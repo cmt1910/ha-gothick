@@ -5,17 +5,18 @@ import argparse
 from pathlib import Path
 import sys
 
-ROOT = Path(__file__).resolve().parents[2]
-SRC_DIR = ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-try:
-    import fontforge  # type: ignore
-except ImportError:
-    raise
-
 from font_builder.config import BuildConfig, load_config
+
+fontforge = None
+
+
+def _load_fontforge_module() -> object:
+    global fontforge
+    if fontforge is None:
+        import fontforge as fontforge_module  # type: ignore
+
+        fontforge = fontforge_module
+    return fontforge
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -30,6 +31,7 @@ def output_path(config: BuildConfig, weight: str) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
+    fontforge_module = _load_fontforge_module()
     args = parse_args(argv or sys.argv[1:])
     config = load_config(args.config)
 
@@ -38,7 +40,7 @@ def main(argv: list[str] | None = None) -> int:
     output.parent.mkdir(parents=True, exist_ok=True)
 
     # 字形を変化させる恐れがある処理はコメントアウト
-    font = fontforge.open(str(input_path))
+    font = fontforge_module.open(str(input_path))
     optimized = 0
     for glyph in font.glyphs():
         if not glyph.isWorthOutputting():

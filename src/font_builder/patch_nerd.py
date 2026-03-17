@@ -5,18 +5,21 @@ import argparse
 from pathlib import Path
 import sys
 
-ROOT = Path(__file__).resolve().parents[2]
-SRC_DIR = ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
-
-try:
-    import fontforge  # type: ignore
-    import psMat  # type: ignore
-except ImportError:
-    raise
-
 from font_builder.config import BuildConfig, load_config
+
+fontforge = None
+psMat = None
+
+
+def _load_fontforge_modules() -> tuple[object, object]:
+    global fontforge, psMat
+    if fontforge is None or psMat is None:
+        import fontforge as fontforge_module  # type: ignore
+        import psMat as ps_mat_module  # type: ignore
+
+        fontforge = fontforge_module
+        psMat = ps_mat_module
+    return fontforge, psMat
 
 
 NERD_SET_RANGES = {
@@ -70,13 +73,14 @@ def copy_glyph(source_font, destination_font, codepoint: int) -> bool:
 
 
 def normalize_width(glyph, target_width: int) -> None:
+    _, ps_mat = _load_fontforge_modules()
     if glyph.width > 0:
         scale = target_width / glyph.width
-        glyph.transform(psMat.scale(scale, scale))
+        glyph.transform(ps_mat.scale(scale, scale))
     left, _, right, _ = glyph.boundingBox()
     outline_width = right - left
     offset_x = (target_width - outline_width) / 2.0 - left
-    glyph.transform(psMat.translate(offset_x, 0))
+    glyph.transform(ps_mat.translate(offset_x, 0))
     glyph.width = target_width
 
 
@@ -99,6 +103,7 @@ def output_path(config: BuildConfig, weight: str) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
+    fontforge_module, _ = _load_fontforge_modules()
     args = parse_args(argv or sys.argv[1:])
     config = load_config(args.config)
 
@@ -109,8 +114,8 @@ def main(argv: list[str] | None = None) -> int:
     output = output_path(config, args.weight)
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    merged = fontforge.open(str(merged_path))
-    nerd = fontforge.open(str(nerd_path))
+    merged = fontforge_module.open(str(merged_path))
+    nerd = fontforge_module.open(str(nerd_path))
     target_width = metrics.half_width
 
     patched = 0
