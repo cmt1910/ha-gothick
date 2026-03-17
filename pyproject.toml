@@ -12,6 +12,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "fontbakery>=1.1.0",
+    "ruff>=0.11.0",
 ]
 
 [project.scripts]
@@ -24,3 +25,27 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/font_builder"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "."]
+exclude = [
+    ".git",
+    ".ruff_cache",
+    ".uv-cache",
+    ".uv-python",
+    ".venv",
+    "build",
+    "dist",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"main.py" = ["E402"]
+"src/font_builder/adjust_bizud.py" = ["E402"]
+"src/font_builder/adjust_hack.py" = ["E402"]
+"src/font_builder/merge.py" = ["E402"]
+"src/font_builder/optimize.py" = ["E402"]
+"src/font_builder/patch_nerd.py" = ["E402"]
+"src/font_builder/patch_tables.py" = ["E402"]
+"src/font_builder/validate.py" = ["E402"]

@@ -110,6 +110,20 @@ docker run --rm \
   bash -lc './validate.sh'
 ```
 
+## Lint
+
+`Ruff` は `dev` 依存に含めています。ローカルでは次で実行できます。
+
+```bash
+uv run ruff check .
+```
+
+必要なら自動整形可能な項目だけ先に修正します。
+
+```bash
+uv run ruff check . --fix
+```
+
 ## 出力
 
 ビルド成功時の成果物:
