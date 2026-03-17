@@ -104,4 +104,4 @@ uv sync --extra dev --python "${PYTHON_VERSION}"
 
 BUILD_ARGS=(--config "${CONFIG}")
 [[ -n "${TARGET_WEIGHT}" ]] && BUILD_ARGS+=(--weight "${TARGET_WEIGHT}")
-uv run python -m font_builder.build "${BUILD_ARGS[@]}"
+uv run ha-gothick-build "${BUILD_ARGS[@]}"
