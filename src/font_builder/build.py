@@ -60,8 +60,8 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
 
     optimized = stage_path(config, "optimized", weight, ".ttf")
     hinted = stage_path(config, "hinted", weight, ".ttf")
+    hint_stripped = stage_path(config, "hint_stripped", weight, ".ttf")
     finalized = stage_path(config, "finalized", weight, ".ttf")
-    final_input = finalized
     if skip_hinting:
         hinted.write_bytes(optimized.read_bytes())
     else:
@@ -72,13 +72,25 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
     run_command(
         [
             *python_command(),
+            "src/font_builder/strip_japanese_hinting.py",
+            "--input",
+            str(hinted),
+            "--output",
+            str(hint_stripped),
+        ],
+        cwd=root,
+    )
+
+    run_command(
+        [
+            *python_command(),
             "src/font_builder/patch_tables.py",
             "--weight",
             weight,
             "--config",
             config_arg,
             "--input",
-            str(hinted),
+            str(hint_stripped),
             "--output",
             str(finalized),
         ],
@@ -86,7 +98,7 @@ def build_weight(config: BuildConfig, weight: str, *, skip_hinting: bool) -> Non
     )
 
     final_path = final_font_path(config, weight)
-    shutil.copyfile(final_input, final_path)
+    shutil.copyfile(finalized, final_path)
 
 
 def _run_hinting(optimized: Path, hinted: Path, root: Path) -> bool:

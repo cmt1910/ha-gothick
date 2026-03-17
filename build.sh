@@ -81,6 +81,7 @@ check_required_files() {
         "${SCRIPT_DIR}/src/font_builder/patch_nerd.py"
         "${SCRIPT_DIR}/src/font_builder/patch_tables.py"
         "${SCRIPT_DIR}/src/font_builder/optimize.py"
+        "${SCRIPT_DIR}/src/font_builder/strip_japanese_hinting.py"
     )
 
     local missing=()
@@ -100,7 +101,7 @@ build_weight() {
     local weight="$1"
     local optimized="build/optimized-${weight}.ttf"
     local hinted="build/hinted-${weight}.ttf"
-    local final_input="${hinted}"
+    local hint_stripped="build/hint-stripped-${weight}.ttf"
 
     log "=== Building weight: ${weight} ==="
 
@@ -135,12 +136,17 @@ build_weight() {
         cp "${optimized}" "${hinted}"
     fi
 
+    log "[Phase 7.25] 日本語グリフのヒンティング削除 (${weight})"
+    uv run python src/font_builder/strip_japanese_hinting.py \
+        --input "${hinted}" \
+        --output "${hint_stripped}"
+
     mkdir -p dist
     log "[Phase 7.3] 最終メタデータ再適用 (${weight})"
     uv run python src/font_builder/patch_tables.py \
         --weight "${weight}" \
         --config "${CONFIG}" \
-        --input "${final_input}" \
+        --input "${hint_stripped}" \
         --output "dist/HA-Gothick-${weight}.ttf"
     cp LICENSE "dist/LICENSE.txt"
     cp README.md "dist/README.md"

@@ -45,7 +45,7 @@ hhea LineGap:    0
 | パッケージ管理 | **uv** | Python プロジェクト管理・依存解決・仮想環境 |
 | テーブル操作 | **fontTools** (uv 経由で管理) | name / OS/2 / hhea 等のメタデータ編集、TTX ダンプ、サブセット化 |
 | グリフ操作 | **FontForge** (system Python bindings) | フォントの読み込み、スケーリング、マージ、アウトライン最適化 |
-| ヒンティング | **ttfautohint** | TrueType 自動ヒンティング |
+| ヒンティング | **ttfautohint** + 後処理 | 欧文中心の TrueType 自動ヒンティングと日本語グリフのヒント除去 |
 
 補助ツール（fontTools に付属、または検証用）:
 
@@ -74,7 +74,7 @@ uv add --dev fontbakery
 - ローカルと CI のビルド・検証は Docker コンテナ内で実行する
 - Docker プラットフォームは `linux/amd64` を既定とし、Apple Silicon でも CI と同一条件に揃える
 - FontForge 依存スクリプト (`adjust_hack.py`, `adjust_bizud.py`, `merge.py`, `patch_nerd.py`, `optimize.py`) は `fontforge -script` で実行する
-- fontTools / PyYAML 依存スクリプト (`patch_tables.py`, `validate.py`) は `uv run python` で実行する
+- fontTools / PyYAML 依存スクリプト (`patch_tables.py`, `strip_japanese_hinting.py`, `validate.py`) は `uv run python` で実行する
 - `python3-fontforge` はシステム Python に入るため、`uv run python` からは直接 import しない前提とする
 
 ### 1.5 ディレクトリ構成
@@ -104,6 +104,7 @@ font-builder/
 │       ├── patch_nerd.py     # Nerd Fonts グリフパッチ
 │       ├── optimize.py       # アウトライン最適化
 │       ├── patch_tables.py   # メタデータ調整 (fontTools)
+│       ├── strip_japanese_hinting.py # 日本語グリフのヒンティング除去
 │       └── validate.py       # 検証スクリプト
 ├── build/                    # 中間生成物
 ├── dist/                     # 最終成果物
@@ -691,18 +692,38 @@ ttfautohint \
 
 パラメータ:
 
-- `--stem-width-mode=nnn` — 各サイズでステム幅をスナップしない（日本語グリフとの相性を考慮）
+- `--stem-width-mode=nnn` — 各サイズでステム幅をスナップしない
 - `--increase-x-height=14` — 14ppem 以下で x-height を 1px 引き上げ
-- `--fallback-script=latn` — 未認識グリフ（日本語・Nerd Fonts 含む）に Latin ヒントをフォールバック適用
+- `--fallback-script=latn` — 未認識グリフに Latin ヒントをフォールバック適用
 
-注意: ttfautohint は Hack の欧文グリフに対して最も効果的。BIZ UDゴシックの日本語グリフおよび Nerd Fonts グリフに対する効果は限定的で、レンダリング品質は主に OS 側のラスタライザに依存する。
+注意: `ttfautohint` は入力全体に対して実行するが、最終成果物では日本語グリフのヒンティングを後段で除去する。狙いは Hack 由来の欧文・記号の視認性を維持しつつ、日本語グリフに対する過剰なヒンティングで輪郭が荒れるのを避けることにある。
 
-##### 7.3 サブセット化（任意）
+##### 7.3 日本語グリフのヒンティング除去
+
+fontTools ベースの後処理 `src/font_builder/strip_japanese_hinting.py` を実行し、以下の範囲に対応するグリフの TrueType 命令を削除する。
+
+- CJK Symbols and Punctuation (`U+3000-U+303F`)
+- Hiragana (`U+3040-U+309F`)
+- Katakana (`U+30A0-U+30FF`)
+- Katakana Phonetic Extensions (`U+31F0-U+31FF`)
+- CJK Unified Ideographs Extension A (`U+3400-U+4DBF`)
+- CJK Unified Ideographs (`U+4E00-U+9FFF`)
+- CJK Compatibility Ideographs (`U+F900-U+FAFF`)
+- Halfwidth and Fullwidth Forms (`U+FF00-U+FFEF`)
+
+この処理では、対象グリフが複合グリフである場合に備えて、その構成要素として参照されるコンポーネントグリフも再帰的に収集してヒントを削除する。削除後は `maxp.maxSizeOfInstructions` を再計算し、TrueType テーブル整合性を維持する。
+
+出力中間生成物:
+
+- `build/hinted.ttf`  `ttfautohint` 実行直後
+- `build/hint-stripped.ttf`  日本語グリフのヒンティング除去後
+
+##### 7.4 サブセット化（任意）
 
 配布サイズ削減のためにグリフを絞る場合:
 
 ```bash
-uv run pyftsubset build/hinted.ttf \
+uv run pyftsubset build/hint-stripped.ttf \
   --unicodes="U+0000-00FF,U+0100-024F,U+2500-257F,U+3000-303F,U+3040-309F,U+30A0-30FF,U+4E00-9FFF,U+FF00-FFEF,U+E0A0-E0D4,U+E200-EC00,U+F0001-F1AF0" \
   --layout-features='*' \
   --name-IDs='*' \
@@ -712,6 +733,8 @@ uv run pyftsubset build/hinted.ttf \
 #### 出力
 
 - アウトライン最適化済みフォント (`build/optimized.ttf`)
+- ヒンティング適用済みフォント (`build/hinted.ttf`)
+- 日本語ヒンティング除去済みフォント (`build/hint-stripped.ttf`)
 - 最終フォントファイル (`dist/HA-Gothick-Regular.ttf`)
 
 ---
@@ -817,7 +840,7 @@ fn main() -> Result<(), Box<dyn Error>> {}
 - ホスト実行時:
   Docker イメージを `--platform linux/amd64` でビルドし、コンテナ内で同じ `build.sh` を再実行する
 - コンテナ内実行時:
-  既存の FontForge / `uv` / `ttfautohint` ベースのビルド本体を実行する
+  FontForge / `uv` / `ttfautohint` ベースのビルド本体を実行し、`ttfautohint` 実行後に日本語グリフのヒンティング除去を行う
 
 主要な環境変数:
 
@@ -1020,7 +1043,7 @@ release/
 | グリフ幅が目標値に収束しない | 警告ログ + 強制設定 |
 | マージ時のコードポイント衝突 | フェーズ 4.2 の優先度テーブルに基づき解決、想定外の衝突はエラー停止 |
 | Nerd Fonts patcher 失敗 | 方式 B（自前マージ）にフォールバック |
-| ttfautohint 失敗 | ヒンティングなし版を出力（警告付き） |
+| ttfautohint 失敗 | ヒンティングなし版を出力し、その後の日本語ヒント除去処理はそのまま継続（警告付き） |
 | fontbakery FAIL 項目 | ビルド失敗とせず、レポートを出力して手動判断 |
 | uv sync 失敗 | ロックファイルの整合性を確認、`uv lock` で再生成 |
 
