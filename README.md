@@ -1,5 +1,7 @@
 # HA-Gothick
 
+![サンプル画像](./docs/sample.png)
+
 Hack と BIZ UDゴシックを合成し、Nerd Fonts の Symbols Only グリフを統合した日本語対応等幅プログラミングフォントのビルド環境です。
 
 ## 構成
