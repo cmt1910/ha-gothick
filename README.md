@@ -160,4 +160,4 @@ dist/
 
 ## ライセンス
 
-合成フォントの配布ライセンスは SIL Open Font License 1.1 を想定しています。上流フォントの権利情報は [LICENSE](LICENSE) を参照してください。
+合成フォントの配布ライセンスは SIL Open Font License 1.1 です。上流フォントの権利情報は [LICENSE](LICENSE) を参照してください。
