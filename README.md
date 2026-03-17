@@ -32,6 +32,7 @@ docker --version
 ```bash
 DOCKER_IMAGE=ha-gothick-build:latest
 DOCKER_PLATFORM=linux/amd64
+PYTHON_VERSION=3.12   # uv sync で使用する Python バージョン（デフォルト: 3.12）
 ```
 
 CI と同じ前処理だけを先に実行したい場合:
@@ -80,6 +81,12 @@ bash ./build.sh
 
 ```bash
 bash ./build.sh --weight Regular
+```
+
+カスタム設定ファイルを使用:
+
+```bash
+bash ./build.sh --config path/to/custom-config.yaml
 ```
 
 中間生成物を削除:
